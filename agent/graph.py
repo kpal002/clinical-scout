@@ -11,13 +11,13 @@ Graph topology:
 from __future__ import annotations
 
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
 import anthropic
 from langgraph.graph import END, START, StateGraph
 
-from agent.agents import analysis, guidelines, quality, query, retrieval, synthesis
+from agent.agents import query, retrieval, synthesis
+from agent.agents import parallel as parallel_agents
 from agent.agents.synthesis import SynthesisInput
 from agent.state import AgentState, Contradiction, Finding, GuidelineConflict, StudyQuality
 
@@ -80,28 +80,10 @@ def orchestrate_parallel(state: AgentState) -> AgentState:
     papers = state["filtered_papers"]
     question = state["clinical_question"]
     mode = state.get("mode", "scout")
-    client = _client()
 
-    quality_scores: List[StudyQuality] = []
-    findings: List[Finding] = []
-    contradictions: List[Contradiction] = []
-    guideline_conflicts: List[GuidelineConflict] = []
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        q_future = pool.submit(quality.run, papers)
-        a_future = pool.submit(analysis.run, papers, question, mode, client)
-        # Guidelines run after analysis resolves findings; use empty list for now
-        # (guidelines.run accepts findings for context but can run with [])
-        g_future = pool.submit(guidelines.run, papers, question, [], client)
-
-        for future in as_completed([q_future, a_future, g_future]):
-            result = future.result()
-            if future is q_future:
-                quality_scores = result
-            elif future is a_future:
-                findings, contradictions = result
-            else:
-                guideline_conflicts = result
+    quality_scores, findings, contradictions, guideline_conflicts = parallel_agents.run(
+        papers, question, mode, _client()
+    )
 
     trace = list(state.get("reasoning_trace", []))
     trace.append(

@@ -157,7 +157,8 @@ def _run_test(question: str, mode: str) -> None:
     console.print(f"  [green]✓[/green] Quality scores: {len(state.get('quality_scores', []))}")
     console.print(f"  [green]✓[/green] Findings: {len(state.get('findings', []))}")
     console.print(f"  [green]✓[/green] Contradictions: {len(state.get('contradictions', []))}")
-    console.print(f"  [green]✓[/green] Guideline conflicts: {len(state.get('guideline_conflicts', []))}")
+    n_gl = len(state.get('guideline_conflicts', []))
+    console.print(f"  [green]✓[/green] Guideline conflicts: {n_gl}")
     console.print(f"  [green]✓[/green] Synthesis: {bool(state['synthesis'])}")
     console.print(f"  [green]✓[/green] Citations: {len(state['citations'])}")
 
