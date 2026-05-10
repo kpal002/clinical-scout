@@ -508,7 +508,7 @@ def _an_detail_html(findings: List[Finding], contradictions: List[Contradiction]
     return findings_html + (contra_html if contradictions else "")
 
 
-def stream_pipeline(
+def stream_pipeline(  # pylint: disable=too-many-locals
     question: str, mode: str
 ) -> Generator[Tuple[str, str, str], None, None]:
     """Run the multi-agent pipeline and yield (log_html, synthesis_md, citations_md)."""
