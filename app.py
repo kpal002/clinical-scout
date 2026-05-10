@@ -335,7 +335,23 @@ footer { display: none !important; }
 }
 
 /* ── Example chips layout ── */
-.examples-row > div { flex: 1 1 0% !important; min-width: 0 !important; }
+.examples-label {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 14px !important;
+    letter-spacing: 4px !important;
+    color: #00ffaa !important;
+    font-weight: 700 !important;
+    margin-bottom: 12px !important;
+}
+.examples-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+}
+.examples-grid > * {
+    height: 100px !important;
+}
 .example-btn { width: 100% !important; }
 """
 
@@ -829,13 +845,8 @@ with gr.Blocks(css=_CSS, theme=gr.themes.Base(), title="Clinical Literature Scou
                 )
 
     # ── Example chips ──────────────────────────────────────────────────────────
-    gr.HTML(
-        '<p style="color:#00ffaa44;font-size:.6rem;font-weight:600;'
-        'letter-spacing:2px;text-transform:uppercase;margin:12px 0 8px;'
-        'font-family:\'JetBrains Mono\',monospace">'
-        '// try an example</p>'
-    )
-    with gr.Row(elem_classes="examples-row"):
+    gr.Markdown("// TRY AN EXAMPLE", elem_classes="examples-label")
+    with gr.Row(elem_classes="examples-grid"):
         for ex_q, ex_m in _EXAMPLES:
             gr.Button(ex_q, elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
@@ -914,27 +925,32 @@ with gr.Blocks(css=_CSS, theme=gr.themes.Base(), title="Clinical Literature Scou
 
 /* Example chips — terminal style */
 .example-btn button {
-    background: #0a0a0a !important;
-    border: 1px solid #1a1a1a !important;
+    background: #0d0d0d !important;
+    border: 1px solid rgba(0, 255, 170, 0.25) !important;
     border-radius: 2px !important;
-    color: #444 !important;
-    font-size: 0.68rem !important;
-    font-weight: 400 !important;
+    color: #aaaaaa !important;
     font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px !important;
     line-height: 1.5 !important;
+    padding: 12px !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
     white-space: normal !important;
-    text-align: left !important;
-    min-height: 56px !important;
-    height: auto !important;
-    padding: 10px 12px !important;
+    text-align: center !important;
+    height: 100px !important;
     width: 100% !important;
-    transition: all 0.12s !important;
-    letter-spacing: 0.2px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
 }
 .example-btn button:hover {
-    background: #0f0f0f !important;
-    border-color: #00ffaa33 !important;
-    color: #00ffaa88 !important;
+    border-color: #00ffaa !important;
+    color: #00ffaa !important;
+    background: #0a1a14 !important;
+}
+.example-btn button::before {
+    content: '> ';
+    color: #00ffaa;
+    opacity: 0.6;
 }
 
 /* Sigma slider track */
