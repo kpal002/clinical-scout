@@ -781,7 +781,7 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
         question_box = gr.Textbox(
             label="", show_label=False,
             placeholder="Ask a clinical question or enter a medical myth to investigate…",
-            lines=3, min_lines=3, elem_classes="question-box",
+            lines=3, elem_classes="question-box",
         )
         with gr.Row(elem_classes="input-footer"):
             mode_radio = gr.Radio(
