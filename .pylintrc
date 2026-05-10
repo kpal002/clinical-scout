@@ -1,0 +1,8 @@
+[MASTER]
+ignored-modules=langgraph,anthropic,rich,requests,urllib3,numpy,sigma_rag,dotenv,sentence_transformers,fastapi,uvicorn
+
+[FORMAT]
+max-line-length=100
+
+[MESSAGES CONTROL]
+disable=C0415
