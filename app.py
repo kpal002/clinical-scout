@@ -335,24 +335,15 @@ footer { display: none !important; }
 }
 
 /* ── Example chips layout ── */
-.examples-label {
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 14px !important;
-    letter-spacing: 4px !important;
-    color: #00ffaa !important;
-    font-weight: 700 !important;
-    margin-bottom: 12px !important;
-}
-.examples-grid {
+#examples-row {
     display: grid !important;
     grid-template-columns: repeat(5, 1fr) !important;
     gap: 8px !important;
     align-items: stretch !important;
 }
-.examples-grid > * {
+#examples-row > * {
     height: 100px !important;
 }
-.example-btn { width: 100% !important; }
 """
 
 # ── HTML rendering helpers ────────────────────────────────────────────────────
@@ -845,8 +836,8 @@ with gr.Blocks(css=_CSS, theme=gr.themes.Base(), title="Clinical Literature Scou
                 )
 
     # ── Example chips ──────────────────────────────────────────────────────────
-    gr.Markdown("// TRY AN EXAMPLE", elem_classes="examples-label")
-    with gr.Row(elem_classes="examples-grid"):
+    gr.Markdown("// TRY AN EXAMPLE", elem_id="examples-label")
+    with gr.Row(elem_id="examples-row"):
         for ex_q, ex_m in _EXAMPLES:
             gr.Button(ex_q, elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
@@ -923,34 +914,53 @@ with gr.Blocks(css=_CSS, theme=gr.themes.Base(), title="Clinical Literature Scou
     box-shadow: 0 0 24px rgba(0,255,170,0.45) !important;
 }
 
-/* Example chips — terminal style */
-.example-btn button {
-    background: #0d0d0d !important;
-    border: 1px solid rgba(0, 255, 170, 0.25) !important;
-    border-radius: 2px !important;
-    color: #aaaaaa !important;
+/* Global border-radius reset — enforce terminal flat aesthetic */
+* {
+    border-radius: 0px !important;
+}
+
+/* Examples label */
+#examples-label p {
     font-family: 'JetBrains Mono', monospace !important;
-    font-size: 12px !important;
-    line-height: 1.5 !important;
-    padding: 12px !important;
-    cursor: pointer !important;
-    transition: all 0.15s ease !important;
-    white-space: normal !important;
-    text-align: center !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: #00ffaa !important;
+    letter-spacing: 5px !important;
+    margin-bottom: 16px !important;
+}
+
+/* Example chips — target Gradio's rendered DOM directly */
+#examples-row button,
+#examples-row .gr-button,
+#examples-row button.lg {
+    background: #000000 !important;
+    border: 1px solid #00ffaa !important;
+    border-radius: 0px !important;
+    color: #00ffaa !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
     height: 100px !important;
     width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
+    padding: 12px 10px !important;
+    white-space: normal !important;
+    text-align: left !important;
+    line-height: 1.6 !important;
+    box-shadow: none !important;
+    transition: all 0.1s ease !important;
+    text-transform: none !important;
 }
-.example-btn button:hover {
-    border-color: #00ffaa !important;
+#examples-row button:hover,
+#examples-row .gr-button:hover {
+    background: #001a0d !important;
+    border-color: #00ffcc !important;
+    color: #00ffcc !important;
+    box-shadow: 0 0 8px rgba(0, 255, 170, 0.3) !important;
+}
+#examples-row button::before {
+    content: '$ ' !important;
     color: #00ffaa !important;
-    background: #0a1a14 !important;
-}
-.example-btn button::before {
-    content: '> ';
-    color: #00ffaa;
-    opacity: 0.6;
+    font-weight: 700 !important;
 }
 
 /* Sigma slider track */
