@@ -295,7 +295,7 @@ def _agent_card(
     )
 
 
-def _render(  # pylint: disable=too-many-arguments
+def _render(  # pylint: disable=too-many-arguments,R0917
     q_state: str, q_detail: str,
     r_state: str, r_detail: str,
     qa_state: str, qa_detail: str,
@@ -517,7 +517,7 @@ def stream_pipeline(  # pylint: disable=too-many-locals
     citations_md = ""
 
     # Initial state — all pending
-    def emit(  # pylint: disable=too-many-arguments
+    def emit(  # pylint: disable=too-many-arguments,R0917
         q=("pending", ""), r=("pending", ""),
         qa=("pending", ""), an=("pending", ""),
         sy=("pending", ""), banner=""
