@@ -388,6 +388,7 @@ with gr.Blocks(
         fn=stream_pipeline,
         inputs=[question_box, mode_radio],
         outputs=[log_out, synthesis_out, citations_out],
+        show_progress="hidden",
     )
 
 if __name__ == "__main__":
