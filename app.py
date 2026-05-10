@@ -24,6 +24,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from agent.agents import analysis, quality, query, synthesis  # noqa: E402  # pylint: disable=wrong-import-position
+from agent.agents.synthesis import SynthesisInput  # noqa: E402  # pylint: disable=wrong-import-position
 from agent.state import Contradiction, Finding, Paper, StudyQuality  # noqa: E402  # pylint: disable=wrong-import-position
 from retrieval import pubmed as _pubmed, sigma_filter as _sf  # noqa: E402  # pylint: disable=wrong-import-position
 
@@ -356,36 +357,20 @@ def _get_client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=key)
 
 
-def _run_retrieval(
-    strategies: dict, question: str
-) -> Tuple[List[Paper], List[Paper], str, str]:
-    """Parallel PubMed search + σ-RAG. Returns (raw, filtered, r_detail, sigma_table)."""
+def _search_one_strategy(name: str, queries: list) -> Tuple[str, List[Paper]]:
+    """Search PubMed for one strategy's queries and return (name, papers)."""
+    pmids: set[str] = set()
+    for q_ in queries:
+        try:
+            pmids.update(_pubmed.search_pubmed(q_, max_results=20))
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+    papers_ = _pubmed.fetch_abstracts(list(pmids)) if pmids else []
+    return name, papers_
 
-    def _search_one(name: str, queries: list) -> Tuple[str, List[Paper]]:
-        pmids: set[str] = set()
-        for q_ in queries:
-            try:
-                pmids.update(_pubmed.search_pubmed(q_, max_results=20))
-            except Exception:  # pylint: disable=broad-exception-caught
-                pass
-        papers_ = _pubmed.fetch_abstracts(list(pmids)) if pmids else []
-        return name, papers_
 
-    all_papers_map: dict[str, Paper] = {}
-    r_detail_parts: list[str] = []
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futs = {pool.submit(_search_one, n, qs): n for n, qs in strategies.items() if qs}
-        for fut in as_completed(futs):
-            name_, papers_ = fut.result()
-            for p in papers_:
-                all_papers_map.setdefault(p["pmid"], p)
-            label = name_.replace("_", " ")
-            r_detail_parts.append(
-                f'{_tag(label, "blue")} → {_tag(str(len(papers_)) + " papers", "gray")}'
-            )
-
-    raw = list(all_papers_map.values())
+def _sigma_filter(raw: List[Paper], question: str) -> Tuple[List[Paper], str]:
+    """Run σ-RAG on raw papers; return (filtered_papers, sigma_html_table)."""
     sigma_rows = ""
 
     def _cb(title: str, score: float, passed: bool) -> None:
@@ -399,13 +384,61 @@ def _run_retrieval(
         filtered = _sf.filter_papers(raw, question, sigma_threshold=0.7, max_results=12,
                                       progress_callback=_cb)
 
-    sigma_table = (
+    table = (
         '<table class="sigma-table"><thead><tr>'
         '<th>Paper</th><th>σ score</th><th></th>'
         f'</tr></thead><tbody>{sigma_rows}</tbody></table>'
     )
-    r_detail = "  ".join(r_detail_parts)
-    return raw, filtered, r_detail, sigma_table
+    return filtered, table
+
+
+def _run_retrieval(
+    strategies: dict, question: str
+) -> Tuple[List[Paper], List[Paper], str, str]:
+    """Parallel PubMed search + σ-RAG. Returns (raw, filtered, r_detail, sigma_table)."""
+    all_papers_map: dict[str, Paper] = {}
+    r_detail_parts: list[str] = []
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futs = {
+            pool.submit(_search_one_strategy, n, qs): n
+            for n, qs in strategies.items() if qs
+        }
+        for fut in as_completed(futs):
+            name_, papers_ = fut.result()
+            for p in papers_:
+                all_papers_map.setdefault(p["pmid"], p)
+            label = name_.replace("_", " ")
+            r_detail_parts.append(
+                f'{_tag(label, "blue")} → {_tag(str(len(papers_)) + " papers", "gray")}'
+            )
+
+    raw = list(all_papers_map.values())
+    filtered, sigma_table = _sigma_filter(raw, question)
+    return raw, filtered, "  ".join(r_detail_parts), sigma_table
+
+
+def _verdict_badge(mode: str, verdict: str) -> str:
+    """Return an HTML badge for the debunker verdict, or empty string."""
+    if mode != "debunker" or not verdict:
+        return ""
+    color = _VERDICT_COLOR.get(verdict, "#6b7280")
+    label = _VERDICT_LABEL.get(verdict, verdict)
+    return (
+        f'<span style="background:rgba(0,0,0,.4);border:1px solid {color};'
+        f'color:{color};padding:2px 10px;border-radius:12px;font-size:0.72rem;'
+        f'font-weight:700;margin-top:4px;display:inline-block">{label}</span>'
+    )
+
+
+def _citations_md(papers: List[Paper]) -> str:
+    """Format filtered papers as markdown citation list."""
+    return "\n\n".join(
+        f"**[{i + 1}]** {p['authors']} ({p['year']}). "
+        f"*{p['title']}*. {p['journal']}. "
+        f"[PubMed {p['pmid']}]({p['url']})"
+        for i, p in enumerate(papers)
+    )
 
 
 def _run_parallel_agents(
@@ -535,13 +568,17 @@ def stream_pipeline(
     if not filtered:
         no_pass_detail = (
             r_detail_full
-            + '<br><span style="color:#f59e0b;font-size:0.72rem">⚠ No papers cleared threshold.</span>'
+            + '<br><span style="color:#f59e0b;font-size:0.72rem">'
+            + '⚠ No papers cleared threshold.</span>'
         )
         yield emit(q=("done", q_detail), r=("error", no_pass_detail))
         return
 
     # ── Quality Agent ∥ Analysis Agent ────────────────────────────────────────
-    yield emit(q=("done", q_detail), r=("done", r_detail_full), qa=("active", ""), an=("active", ""))
+    yield emit(
+        q=("done", q_detail), r=("done", r_detail_full),
+        qa=("active", ""), an=("active", ""),
+    )
 
     quality_scores, findings, contradictions = _run_parallel_agents(
         filtered, question, mode, client
@@ -558,7 +595,11 @@ def stream_pipeline(
     # ── Synthesis Agent ────────────────────────────────────────────────────────
     try:
         synth, verdict, _ = synthesis.run(
-            filtered, quality_scores, findings, contradictions, question, mode, client
+            SynthesisInput(
+                papers=filtered, scores=quality_scores, findings=findings,
+                contradictions=contradictions, question=question, mode=mode,
+            ),
+            client,
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
         yield emit(
@@ -568,31 +609,14 @@ def stream_pipeline(
         )
         return
 
-    verdict_html = ""
-    if mode == "debunker" and verdict:
-        color = _VERDICT_COLOR.get(verdict, "#6b7280")
-        label = _VERDICT_LABEL.get(verdict, verdict)
-        verdict_html = (
-            f'<span style="background:rgba(0,0,0,.4);border:1px solid {color};'
-            f'color:{color};padding:2px 10px;border-radius:12px;font-size:0.72rem;'
-            f'font-weight:700;margin-top:4px;display:inline-block">{label}</span>'
-        )
+    badge = _verdict_badge(mode, verdict or "")
     sy_detail = (
-        f'{_tag(str(len(filtered)) + " papers synthesized", "green")}'
-        + (f"  {verdict_html}" if verdict_html else "")
+        _tag(str(len(filtered)) + " papers synthesized", "green")
+        + (f"  {badge}" if badge else "")
     )
-
-    banner = (
-        '<div class="complete-banner">✦ All agents complete — results ready</div>'
-    )
-
+    banner = '<div class="complete-banner">✦ All agents complete — results ready</div>'
     synthesis_md = synth
-    citations_md = "\n\n".join(
-        f"**[{i + 1}]** {p['authors']} ({p['year']}). "
-        f"*{p['title']}*. {p['journal']}. "
-        f"[PubMed {p['pmid']}]({p['url']})"
-        for i, p in enumerate(filtered)
-    )
+    citations_md = _citations_md(filtered)
 
     yield emit(
         q=("done", q_detail), r=("done", r_detail_full),
@@ -638,7 +662,10 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
             )
             question_box = gr.Textbox(
                 label="Your question or myth",
-                placeholder="E.g. What is the evidence for GLP-1 receptor agonists in reducing cardiovascular risk?",
+                placeholder=(
+                    "E.g. What is the evidence for GLP-1 receptor agonists"
+                    " in reducing cardiovascular risk?"
+                ),
                 lines=2, scale=4, elem_classes="question-box",
             )
 

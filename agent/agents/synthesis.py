@@ -10,7 +10,7 @@ from agent.state import Contradiction, Finding, Paper, StudyQuality
 
 
 @dataclass
-class _SynthesisInput:
+class SynthesisInput:
     papers: List[Paper]
     scores: List[StudyQuality]
     findings: List[Finding]
@@ -109,7 +109,7 @@ def _contradictions_context(contradictions: List[Contradiction]) -> str:
     )
 
 
-def _build_prompt(inp: _SynthesisInput) -> str:
+def _build_prompt(inp: SynthesisInput) -> str:
     label = "Medical Myth" if inp.mode == "debunker" else "Clinical Question"
     numbered = "\n\n".join(
         f"[{i + 1}] PMID:{p['pmid']} | {p['authors']} ({p['year']}) | {p['journal']}\n"
@@ -140,23 +140,14 @@ def _extract_verdict(synthesis: str) -> Optional[str]:
 
 
 def run(
-    papers: List[Paper],
-    scores: List[StudyQuality],
-    findings: List[Finding],
-    contradictions: List[Contradiction],
-    question: str,
-    mode: str,
+    inp: SynthesisInput,
     client: anthropic.Anthropic,
 ) -> Tuple[str, Optional[str], List[str]]:
     """Produce the final synthesis with claim-level citations.
 
     Returns (synthesis_text, verdict_or_None, citation_list).
     """
-    inp = _SynthesisInput(
-        papers=papers, scores=scores, findings=findings,
-        contradictions=contradictions, question=question, mode=mode,
-    )
-    system = _DEBUNKER_SYSTEM if mode == "debunker" else _SCOUT_SYSTEM
+    system = _DEBUNKER_SYSTEM if inp.mode == "debunker" else _SCOUT_SYSTEM
     prompt = _build_prompt(inp)
 
     resp = client.messages.create(
@@ -166,9 +157,9 @@ def run(
         messages=[{"role": "user", "content": prompt}],
     )
     synthesis = resp.content[0].text.strip()
-    verdict = _extract_verdict(synthesis) if mode == "debunker" else None
+    verdict = _extract_verdict(synthesis) if inp.mode == "debunker" else None
     citations = [
         f"[{i + 1}] {p['authors']} ({p['year']}). {p['title']}. {p['journal']}. {p['url']}"
-        for i, p in enumerate(papers)
+        for i, p in enumerate(inp.papers)
     ]
     return synthesis, verdict, citations

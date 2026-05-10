@@ -148,6 +148,7 @@ def _run_test(question: str, mode: str) -> None:
 
 
 def main() -> None:
+    """Run smoke tests for both scout and debunker modes."""
     console.print(
         "\n[bold cyan]Clinical Literature Scout — Multi-Agent Smoke Test[/bold cyan]\n"
     )

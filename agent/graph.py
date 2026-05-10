@@ -18,6 +18,7 @@ import anthropic
 from langgraph.graph import END, START, StateGraph
 
 from agent.agents import analysis, quality, query, retrieval, synthesis
+from agent.agents.synthesis import SynthesisInput
 from agent.state import AgentState, Contradiction, Finding, StudyQuality
 
 
@@ -123,7 +124,11 @@ def orchestrate_synthesis(state: AgentState) -> AgentState:
     mode = state.get("mode", "scout")
 
     synth, verdict, cites = synthesis.run(
-        papers, scores, all_findings, all_contradictions, question, mode, _client()
+        SynthesisInput(
+            papers=papers, scores=scores, findings=all_findings,
+            contradictions=all_contradictions, question=question, mode=mode,
+        ),
+        _client(),
     )
 
     trace = list(state.get("reasoning_trace", []))
