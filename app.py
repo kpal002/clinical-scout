@@ -374,7 +374,9 @@ def _search_one_strategy(name: str, queries: list) -> Tuple[str, List[Paper]]:
     return name, papers_
 
 
-def _sigma_filter(raw: List[Paper], question: str) -> Tuple[List[Paper], str]:
+def _sigma_filter(
+    raw: List[Paper], question: str, sigma_threshold: float = 1.2
+) -> Tuple[List[Paper], str]:
     """Run σ-RAG on raw papers; return (filtered_papers, sigma_html_table)."""
     sigma_rows = ""
 
@@ -382,12 +384,13 @@ def _sigma_filter(raw: List[Paper], question: str) -> Tuple[List[Paper], str]:
         nonlocal sigma_rows
         sigma_rows += _sigma_row(title, score, passed)
 
-    filtered = _sf.filter_papers(raw, question, sigma_threshold=1.2, max_results=12,
-                                  progress_callback=_cb)
+    filtered = _sf.filter_papers(raw, question, sigma_threshold=sigma_threshold,
+                                  max_results=12, progress_callback=_cb)
     if not filtered and raw:
         sigma_rows = ""
-        filtered = _sf.filter_papers(raw, question, sigma_threshold=0.7, max_results=12,
-                                      progress_callback=_cb)
+        fallback = max(0.3, sigma_threshold - 0.5)
+        filtered = _sf.filter_papers(raw, question, sigma_threshold=fallback,
+                                      max_results=12, progress_callback=_cb)
 
     table = (
         '<table class="sigma-table"><thead><tr>'
@@ -398,7 +401,7 @@ def _sigma_filter(raw: List[Paper], question: str) -> Tuple[List[Paper], str]:
 
 
 def _run_retrieval(
-    strategies: dict, question: str
+    strategies: dict, question: str, sigma_threshold: float = 1.2
 ) -> Tuple[List[Paper], List[Paper], str, str]:
     """Parallel PubMed search + σ-RAG. Returns (raw, filtered, r_detail, sigma_table)."""
     all_papers_map: dict[str, Paper] = {}
@@ -419,7 +422,7 @@ def _run_retrieval(
             )
 
     raw = list(all_papers_map.values())
-    filtered, sigma_table = _sigma_filter(raw, question)
+    filtered, sigma_table = _sigma_filter(raw, question, sigma_threshold)
     return raw, filtered, "  ".join(r_detail_parts), sigma_table
 
 
@@ -549,7 +552,7 @@ def _an_detail_html(findings: List[Finding], contradictions: List[Contradiction]
 
 
 def stream_pipeline(  # pylint: disable=too-many-locals
-    question: str, mode: str
+    question: str, mode: str, sigma_threshold: float = 1.2
 ) -> Generator[Tuple[str, str, str], None, None]:
     """Run the multi-agent pipeline and yield (log_html, synthesis_md, citations_md)."""
 
@@ -603,7 +606,9 @@ def stream_pipeline(  # pylint: disable=too-many-locals
     # ── Retrieval Agent ────────────────────────────────────────────────────────
     yield emit(q=("done", q_detail), r=("active", ""))
 
-    raw_papers, filtered, r_detail_base, sigma_table = _run_retrieval(strategies, question)
+    raw_papers, filtered, r_detail_base, sigma_table = _run_retrieval(
+        strategies, question, sigma_threshold
+    )
     r_detail_full = (
         r_detail_base
         + f'<br>{_tag(str(len(raw_papers)) + " raw", "gray")} → '
@@ -712,91 +717,103 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
     </div>
     """)
 
-    # Late-injected styles beat Gradio's Svelte-scoped CSS in the cascade
-    gr.HTML("""<style>
-/* ── Textarea ── */
-.question-box textarea {
-    background: #0a0a14 !important; border: 1px solid #1e1e30 !important;
-    border-radius: 10px !important; color: #e2e8f0 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
-    resize: none !important; padding: 14px 16px !important;
-    line-height: 1.65 !important; min-height: 90px !important;
-}
-.question-box textarea::placeholder { color: #2a3550 !important; }
-.question-box textarea:focus {
-    border-color: #2dd4bf !important;
-    box-shadow: 0 0 0 2px rgba(45,212,191,0.1) !important;
-    outline: none !important;
-}
-.question-box label { display: none !important; }
-/* ── Mode radio ── */
-.mode-radio label.svelte-1p9xozt, .mode-radio > label { display: none !important; }
-.mode-radio .wrap label {
-    background: #0e0e1c !important; border: 1px solid #1a1a2e !important;
-    color: #4b5563 !important;
-}
-.mode-radio .wrap label:has(input:checked) {
-    background: rgba(45,212,191,0.1) !important;
-    border-color: rgba(45,212,191,0.55) !important; color: #2dd4bf !important;
-}
-/* ── Run button ── */
-.run-btn button {
-    background: linear-gradient(135deg, #0d9488, #2dd4bf) !important;
-    border: none !important; border-radius: 10px !important;
-    color: #011a18 !important; font-weight: 700 !important;
-    font-size: 0.86rem !important; letter-spacing: 0.3px !important;
-    height: 40px !important; padding: 0 26px !important;
-    box-shadow: 0 3px 14px rgba(45,212,191,0.28) !important;
-    transition: transform 0.18s, box-shadow 0.18s !important;
-}
-.run-btn button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 22px rgba(45,212,191,0.42) !important;
-}
-/* ── Example chips ── */
-.examples-label { color: #2dd4bf !important; }
-.example-btn button {
-    background: #071a18 !important; border: 1px solid #0d9488 !important;
-    border-radius: 10px !important; color: #2dd4bf !important;
-    font-size: 0.72rem !important; font-weight: 500 !important;
-    line-height: 1.45 !important; white-space: normal !important;
-    text-align: center !important; min-height: 58px !important;
-    height: auto !important; padding: 10px 12px !important; width: 100% !important;
-    transition: all 0.18s !important;
-}
-.example-btn button:hover {
-    background: #0a2825 !important; border-color: #2dd4bf !important;
-    color: #5eead4 !important; transform: translateY(-1px) !important;
-    box-shadow: 0 4px 16px rgba(45,212,191,0.15) !important;
-}
-</style>""")
-
-    # ── Input card: mode + textarea + Run in one row ───────────────────────────
+    # ── Input panel (gr.Column gives natural stacked rows) ────────────────────
     with gr.Group(elem_classes="input-card"):
-        with gr.Row():
-            mode_radio = gr.Radio(
-                choices=["scout", "debunker"], value="scout",
-                label="Mode", scale=1, elem_classes="mode-radio",
-            )
+        with gr.Column():
+
+            # Row 1 — Mode label + radio
+            with gr.Row():
+                mode_radio = gr.Radio(
+                    choices=["scout", "debunker"], value="scout",
+                    label="Mode", scale=1, elem_classes="mode-radio",
+                )
+
+            # 8 px spacer
+            gr.HTML('<div style="height:8px"></div>')
+
+            # Row 2 — Large text input (full width)
             question_box = gr.Textbox(
-                label="Your question or myth",
-                placeholder="Ask a clinical question or enter a medical myth…",
-                lines=3, scale=5, elem_classes="question-box",
+                label="Your Question",
+                placeholder=(
+                    "E.g. What is the evidence for GLP-1 receptor agonists"
+                    " in reducing cardiovascular risk?"
+                ),
+                lines=3, min_width=600, elem_classes="question-box",
             )
-            run_btn = gr.Button(
-                "Run →", scale=0, min_width=120, elem_classes="run-btn",
-            )
+
+            # Row 3 — σ-RAG threshold slider (left) + Run button (right)
+            with gr.Row():
+                sigma_slider = gr.Slider(
+                    minimum=0.3, maximum=2.5, value=1.2, step=0.1,
+                    label="σ-RAG threshold (higher = stricter relevance filter)",
+                    scale=4, elem_classes="sigma-slider",
+                )
+                run_btn = gr.Button(
+                    "Run →", scale=1, min_width=120,
+                    elem_classes="run-btn", variant="primary",
+                )
 
     # ── Example chips ──────────────────────────────────────────────────────────
-    gr.HTML('<div class="examples-label" style="font-size:.62rem;font-weight:700;'
-            'letter-spacing:1.5px;text-transform:uppercase;margin:10px 0 8px;'
-            'color:#2dd4bf">Try an example</div>')
+    gr.HTML(
+        '<p style="color:#2dd4bf;font-size:.63rem;font-weight:700;'
+        'letter-spacing:1.5px;text-transform:uppercase;margin:12px 0 8px">'
+        'Try an example</p>'
+    )
     with gr.Row(elem_classes="examples-row"):
         for ex_q, ex_m in _EXAMPLES:
             gr.Button(ex_q, elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
             )
+
+    # ── Late-injected styles (load after Gradio's Svelte CSS — wins cascade) ───
+    gr.HTML("""<style>
+.question-box textarea {
+    background: #0a0a14 !important; border: 1px solid #252535 !important;
+    border-radius: 10px !important; color: #e2e8f0 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
+    resize: vertical !important; padding: 14px 16px !important;
+    line-height: 1.65 !important;
+}
+.question-box textarea:focus {
+    border-color: #2dd4bf !important;
+    box-shadow: 0 0 0 2px rgba(45,212,191,0.12) !important; outline: none !important;
+}
+.mode-radio .wrap label {
+    background: #0e0e1e !important; border: 1px solid #1e1e30 !important;
+    border-radius: 20px !important; color: #6b7280 !important;
+    padding: 5px 18px !important; font-size: 0.8rem !important;
+    transition: all 0.18s !important; cursor: pointer !important;
+}
+.mode-radio .wrap label:has(input:checked) {
+    background: rgba(45,212,191,0.12) !important;
+    border-color: #2dd4bf !important; color: #2dd4bf !important;
+}
+.run-btn button {
+    background: linear-gradient(135deg, #0d9488, #2dd4bf) !important;
+    border: none !important; border-radius: 10px !important;
+    color: #011a18 !important; font-weight: 700 !important; font-size: 0.88rem !important;
+    box-shadow: 0 3px 14px rgba(45,212,191,0.3) !important;
+    transition: transform 0.18s, box-shadow 0.18s !important;
+}
+.run-btn button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(45,212,191,0.45) !important;
+}
+.example-btn button {
+    background: #071a18 !important; border: 1px solid #0d9488 !important;
+    border-radius: 10px !important; color: #2dd4bf !important;
+    font-size: 0.72rem !important; font-weight: 500 !important;
+    line-height: 1.45 !important; white-space: normal !important;
+    text-align: center !important; min-height: 56px !important;
+    height: auto !important; padding: 10px 12px !important; width: 100% !important;
+    transition: all 0.18s !important;
+}
+.example-btn button:hover {
+    background: #0a2825 !important; border-color: #2dd4bf !important;
+    color: #5eead4 !important; transform: translateY(-1px) !important;
+}
+</style>""")
 
     # ── Output panels ──────────────────────────────────────────────────────────
     with gr.Row(equal_height=True):
@@ -815,7 +832,7 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
 
     run_btn.click(
         fn=stream_pipeline,
-        inputs=[question_box, mode_radio],
+        inputs=[question_box, mode_radio, sigma_slider],
         outputs=[log_out, synthesis_out, citations_out],
         show_progress="hidden",
     )
