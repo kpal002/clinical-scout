@@ -64,6 +64,18 @@ _ANALYSIS_KNUCKLE = json.dumps({
     "contradictions": [],
 })
 
+_GUIDELINES_GLP1 = json.dumps([
+    {
+        "organization": "ADA",
+        "recommendation": "GLP-1 RAs are recommended for T2D patients with CVD or high CV risk.",
+        "evidence_summary": "Multiple RCTs confirm 22–26% MACE reduction vs placebo.",
+        "conflict_level": "supports",
+        "pmid": "29650612",
+    }
+])
+
+_GUIDELINES_KNUCKLE = json.dumps([])
+
 _SYNTHESIS_SCOUT = (
     "## ANSWER\n"
     "GLP-1 receptor agonists significantly reduce cardiovascular risk. [MOCK]\n\n"
@@ -100,6 +112,13 @@ def _mock_create(**kwargs) -> MagicMock:
             mock.content[0].text = _STRATEGIES_KNUCKLE
         else:
             mock.content[0].text = _STRATEGIES_GLP1
+
+    # Guidelines Agent call → JSON guideline conflicts array
+    elif "guideline analyst" in system.lower() or "conflict_level" in system.lower():
+        if "knuckle" in user_content or "arthritis" in user_content:
+            mock.content[0].text = _GUIDELINES_KNUCKLE
+        else:
+            mock.content[0].text = _GUIDELINES_GLP1
 
     # Analysis Agent call → JSON findings + contradictions
     elif '"findings"' in system or (
@@ -138,6 +157,7 @@ def _run_test(question: str, mode: str) -> None:
     console.print(f"  [green]✓[/green] Quality scores: {len(state.get('quality_scores', []))}")
     console.print(f"  [green]✓[/green] Findings: {len(state.get('findings', []))}")
     console.print(f"  [green]✓[/green] Contradictions: {len(state.get('contradictions', []))}")
+    console.print(f"  [green]✓[/green] Guideline conflicts: {len(state.get('guideline_conflicts', []))}")
     console.print(f"  [green]✓[/green] Synthesis: {bool(state['synthesis'])}")
     console.print(f"  [green]✓[/green] Citations: {len(state['citations'])}")
 

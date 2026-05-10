@@ -39,6 +39,15 @@ class Contradiction(TypedDict):
     pmid_b: str
 
 
+class GuidelineConflict(TypedDict):
+    """A comparison between a published guideline recommendation and retrieved evidence."""
+    organization: str   # e.g. "AHA", "ADA", "USPSTF", "NICE", "Cochrane"
+    recommendation: str  # What the current guideline says
+    evidence_summary: str  # What the retrieved research says
+    conflict_level: str  # "supports" | "minor" | "moderate" | "major"
+    pmid: str           # PubMed ID of the source guideline document
+
+
 class AgentState(dict):
     """Full mutable state threaded through the multi-agent pipeline."""
 
@@ -64,6 +73,9 @@ class AgentState(dict):
     # ── Analysis Agent (parallel with Quality) ─────────────────────────────────
     findings: List[Finding]
     contradictions: List[Contradiction]
+
+    # ── Guidelines Agent (parallel with Quality + Analysis) ────────────────────
+    guideline_conflicts: List[GuidelineConflict]
 
     # ── Synthesis Agent ────────────────────────────────────────────────────────
     synthesis: Optional[str]

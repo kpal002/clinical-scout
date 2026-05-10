@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 import anthropic
 
-from agent.state import Contradiction, Finding, Paper, StudyQuality
+from agent.state import Contradiction, Finding, GuidelineConflict, Paper, StudyQuality
 
 
 @dataclass
@@ -16,6 +16,7 @@ class SynthesisInput:
     scores: List[StudyQuality]
     findings: List[Finding]
     contradictions: List[Contradiction]
+    guideline_conflicts: List[GuidelineConflict]
     question: str
     mode: str
 
@@ -39,6 +40,10 @@ FORMAT (use exactly these headers):
 
 ## CONTRADICTIONS
 - Any conflicting findings between papers, or "None detected."
+
+## GUIDELINE IMPLICATIONS
+- For each guideline conflict provided: state the organization, current recommendation,
+  and whether the evidence supports or challenges it. Or "No guideline conflicts detected."
 
 ## LIMITATIONS
 - Key gaps, biases, or caveats
@@ -68,6 +73,10 @@ FORMAT (use exactly these headers):
 
 ## CONTRADICTIONS
 - Any conflicting findings, or "None detected."
+
+## GUIDELINE IMPLICATIONS
+- For each guideline conflict provided: state the organization, current recommendation,
+  and whether the evidence supports or challenges it. Or "No guideline conflicts detected."
 
 ## COMMON MISCONCEPTION
 (Why people believe the myth — 1–2 sentences)
@@ -101,6 +110,18 @@ def _findings_context(findings: List[Finding]) -> str:
     )
 
 
+def _guideline_context(guideline_conflicts: List[GuidelineConflict]) -> str:
+    if not guideline_conflicts:
+        return "  No guideline conflicts detected."
+    level_icon = {"supports": "✓", "minor": "⚠", "moderate": "⚠⚠", "major": "✗"}
+    return "\n".join(
+        f"  {level_icon.get(c['conflict_level'], '?')} [{c['organization']}] "
+        f"{c['recommendation']} → {c['conflict_level'].upper()} "
+        f"(PMID {c['pmid']})"
+        for c in guideline_conflicts
+    )
+
+
 def _contradictions_context(contradictions: List[Contradiction]) -> str:
     if not contradictions:
         return "  None detected."
@@ -124,6 +145,8 @@ def _build_prompt(inp: SynthesisInput) -> str:
         f"=== KEY FINDINGS PRE-EXTRACTED ===\n{_findings_context(inp.findings)}\n\n"
         f"=== CONTRADICTIONS DETECTED ===\n"
         f"{_contradictions_context(inp.contradictions)}\n\n"
+        f"=== GUIDELINE CONFLICTS ===\n"
+        f"{_guideline_context(inp.guideline_conflicts)}\n\n"
         f"=== PAPERS (cite by number) ===\n{numbered}"
     )
 

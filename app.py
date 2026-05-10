@@ -23,9 +23,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from agent.agents import analysis, quality, query, synthesis  # noqa: E402  # pylint: disable=wrong-import-position
+from agent.agents import analysis, guidelines, quality, query, synthesis  # noqa: E402  # pylint: disable=wrong-import-position
 from agent.agents.synthesis import SynthesisInput  # noqa: E402  # pylint: disable=wrong-import-position
-from agent.state import Contradiction, Finding, Paper, StudyQuality  # noqa: E402  # pylint: disable=wrong-import-position
+from agent.state import Contradiction, Finding, GuidelineConflict, Paper, StudyQuality  # noqa: E402  # pylint: disable=wrong-import-position
 from retrieval import pubmed as _pubmed, sigma_filter as _sf  # noqa: E402  # pylint: disable=wrong-import-position
 
 _EXAMPLES = [
@@ -245,6 +245,18 @@ footer { display: none !important; }
     border-radius: 6px; padding: 5px 8px; margin: 3px 0; font-size: 0.73rem; color: #92400e;
 }
 
+.guideline-row {
+    display: flex; gap: 8px; align-items: flex-start; margin: 3px 0; font-size: 0.75rem;
+}
+.guideline-org {
+    flex-shrink: 0; font-weight: 600; font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+.conflict-supports { color: #34d399; }
+.conflict-minor    { color: #fbbf24; }
+.conflict-moderate { color: #f97316; }
+.conflict-major    { color: #ef4444; }
+
 .complete-banner {
     background: linear-gradient(135deg,rgba(5,150,105,.08),rgba(52,211,153,.04));
     border: 1px solid rgba(52,211,153,.18); border-radius: 8px;
@@ -300,6 +312,7 @@ def _render(  # pylint: disable=too-many-arguments,R0917
     r_state: str, r_detail: str,
     qa_state: str, qa_detail: str,
     an_state: str, an_detail: str,
+    gl_state: str, gl_detail: str,
     sy_state: str, sy_detail: str,
     banner: str = "",
 ) -> str:
@@ -310,6 +323,7 @@ def _render(  # pylint: disable=too-many-arguments,R0917
         f'    <div class="parallel-label">⚡ parallel</div>'
         f'    {_agent_card("📊", "Quality Agent", qa_state, qa_detail, qa_state == "active")}'
         f'    {_agent_card("🔬", "Analysis Agent", an_state, an_detail, an_state == "active")}'
+        f'    {_agent_card("📋", "Guidelines Agent", gl_state, gl_detail, gl_state == "active")}'
         f'  </div>'
         f'</div>'
     )
@@ -455,23 +469,49 @@ def _citations_md(papers: List[Paper]) -> str:
 
 def _run_parallel_agents(
     filtered: List[Paper], question: str, mode: str, client: anthropic.Anthropic
-) -> Tuple[List[StudyQuality], List[Finding], List[Contradiction]]:
-    """Run Quality and Analysis agents concurrently."""
+) -> Tuple[List[StudyQuality], List[Finding], List[Contradiction], List[GuidelineConflict]]:
+    """Run Quality, Analysis, and Guidelines agents concurrently."""
     quality_scores: List[StudyQuality] = []
     findings: List[Finding] = []
     contradictions: List[Contradiction] = []
+    guideline_conflicts: List[GuidelineConflict] = []
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         q_fut = pool.submit(quality.run, filtered)
         a_fut = pool.submit(analysis.run, filtered, question, mode, client)
-        for fut in as_completed([q_fut, a_fut]):
+        g_fut = pool.submit(guidelines.run, filtered, question, [], client)
+        for fut in as_completed([q_fut, a_fut, g_fut]):
             result = fut.result()
             if fut is q_fut:
                 quality_scores = result
-            else:
+            elif fut is a_fut:
                 findings, contradictions = result
+            else:
+                guideline_conflicts = result
 
-    return quality_scores, findings, contradictions
+    return quality_scores, findings, contradictions, guideline_conflicts
+
+
+def _gl_detail_html(guideline_conflicts: List[GuidelineConflict]) -> str:
+    """Build the Guidelines Agent detail block."""
+    if not guideline_conflicts:
+        return '<span style="color:#374151;font-size:0.72rem">No conflicts detected</span>'
+    level_color = {
+        "supports": "conflict-supports", "minor": "conflict-minor",
+        "moderate": "conflict-moderate", "major": "conflict-major",
+    }
+    rows = []
+    for c in guideline_conflicts[:4]:
+        cls = level_color.get(c["conflict_level"], "conflict-minor")
+        rows.append(
+            f'<div class="guideline-row">'
+            f'<span class="guideline-org {cls}">[{c["organization"]}]</span>'
+            f'<span style="color:#6b7280">'
+            f'{c["recommendation"][:80]}{"…" if len(c["recommendation"]) > 80 else ""}'
+            f'</span>'
+            f'</div>'
+        )
+    return "".join(rows)
 
 
 def _qa_detail_html(quality_scores: List[StudyQuality]) -> str:
@@ -520,10 +560,16 @@ def stream_pipeline(  # pylint: disable=too-many-locals
     def emit(  # pylint: disable=too-many-arguments,R0917
         q=("pending", ""), r=("pending", ""),
         qa=("pending", ""), an=("pending", ""),
-        sy=("pending", ""), banner=""
+        gl=("pending", ""), sy=("pending", ""),
+        banner=""
     ) -> Tuple[str, str, str]:
         return (
-            _render(q[0], q[1], r[0], r[1], qa[0], qa[1], an[0], an[1], sy[0], sy[1], banner),
+            _render(
+                q[0], q[1], r[0], r[1],
+                qa[0], qa[1], an[0], an[1],
+                gl[0], gl[1], sy[0], sy[1],
+                banner,
+            ),
             synthesis_md,
             citations_md,
         )
@@ -571,25 +617,27 @@ def stream_pipeline(  # pylint: disable=too-many-locals
             + '<br><span style="color:#f59e0b;font-size:0.72rem">'
             + '⚠ No papers cleared threshold.</span>'
         )
-        yield emit(q=("done", q_detail), r=("error", no_pass_detail))
+        yield emit(q=("done", q_detail), r=("error", no_pass_detail),
+                   qa=("pending", ""), an=("pending", ""), gl=("pending", ""))
         return
 
-    # ── Quality Agent ∥ Analysis Agent ────────────────────────────────────────
+    # ── Quality ∥ Analysis ∥ Guidelines ───────────────────────────────────────
     yield emit(
         q=("done", q_detail), r=("done", r_detail_full),
-        qa=("active", ""), an=("active", ""),
+        qa=("active", ""), an=("active", ""), gl=("active", ""),
     )
 
-    quality_scores, findings, contradictions = _run_parallel_agents(
+    quality_scores, findings, contradictions, guideline_conflicts = _run_parallel_agents(
         filtered, question, mode, client
     )
     qa_detail = _qa_detail_html(quality_scores)
     an_detail = _an_detail_html(findings, contradictions)
+    gl_detail = _gl_detail_html(guideline_conflicts)
 
     yield emit(
         q=("done", q_detail), r=("done", r_detail_full),
         qa=("done", qa_detail), an=("done", an_detail),
-        sy=("active", ""),
+        gl=("done", gl_detail), sy=("active", ""),
     )
 
     # ── Synthesis Agent ────────────────────────────────────────────────────────
@@ -597,7 +645,8 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         synth, verdict, _ = synthesis.run(
             SynthesisInput(
                 papers=filtered, scores=quality_scores, findings=findings,
-                contradictions=contradictions, question=question, mode=mode,
+                contradictions=contradictions, guideline_conflicts=guideline_conflicts,
+                question=question, mode=mode,
             ),
             client,
         )
@@ -605,7 +654,7 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         yield emit(
             q=("done", q_detail), r=("done", r_detail_full),
             qa=("done", qa_detail), an=("done", an_detail),
-            sy=("error", f"❌ {exc}"),
+            gl=("done", gl_detail), sy=("error", f"❌ {exc}"),
         )
         return
 
@@ -621,12 +670,12 @@ def stream_pipeline(  # pylint: disable=too-many-locals
     yield emit(
         q=("done", q_detail), r=("done", r_detail_full),
         qa=("done", qa_detail), an=("done", an_detail),
-        sy=("done", sy_detail), banner=banner,
+        gl=("done", gl_detail), sy=("done", sy_detail), banner=banner,
     )
     yield emit(
         q=("done", q_detail), r=("done", r_detail_full),
         qa=("done", qa_detail), an=("done", an_detail),
-        sy=("done", sy_detail), banner=banner,
+        gl=("done", gl_detail), sy=("done", sy_detail), banner=banner,
     )
 
 

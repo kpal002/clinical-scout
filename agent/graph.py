@@ -17,9 +17,9 @@ from typing import List
 import anthropic
 from langgraph.graph import END, START, StateGraph
 
-from agent.agents import analysis, quality, query, retrieval, synthesis
+from agent.agents import analysis, guidelines, quality, query, retrieval, synthesis
 from agent.agents.synthesis import SynthesisInput
-from agent.state import AgentState, Contradiction, Finding, StudyQuality
+from agent.state import AgentState, Contradiction, Finding, GuidelineConflict, StudyQuality
 
 
 # ── Shared client ─────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ def orchestrate_retrieval(state: AgentState) -> AgentState:
 # ── Node: Parallel Quality + Analysis ────────────────────────────────────────
 
 def orchestrate_parallel(state: AgentState) -> AgentState:
-    """Run Quality Agent and Analysis Agent concurrently via ThreadPoolExecutor."""
+    """Run Quality, Analysis, and Guidelines agents concurrently."""
     papers = state["filtered_papers"]
     question = state["clinical_question"]
     mode = state.get("mode", "scout")
@@ -85,28 +85,36 @@ def orchestrate_parallel(state: AgentState) -> AgentState:
     quality_scores: List[StudyQuality] = []
     findings: List[Finding] = []
     contradictions: List[Contradiction] = []
+    guideline_conflicts: List[GuidelineConflict] = []
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         q_future = pool.submit(quality.run, papers)
         a_future = pool.submit(analysis.run, papers, question, mode, client)
+        # Guidelines run after analysis resolves findings; use empty list for now
+        # (guidelines.run accepts findings for context but can run with [])
+        g_future = pool.submit(guidelines.run, papers, question, [], client)
 
-        for future in as_completed([q_future, a_future]):
+        for future in as_completed([q_future, a_future, g_future]):
             result = future.result()
             if future is q_future:
                 quality_scores = result
-            else:
+            elif future is a_future:
                 findings, contradictions = result
+            else:
+                guideline_conflicts = result
 
     trace = list(state.get("reasoning_trace", []))
     trace.append(
         f"Quality Agent: {len(quality_scores)} papers scored | "
-        f"Analysis Agent: {len(findings)} findings, {len(contradictions)} contradictions"
+        f"Analysis Agent: {len(findings)} findings, {len(contradictions)} contradictions | "
+        f"Guidelines Agent: {len(guideline_conflicts)} conflicts"
     )
     return {
         **state,
         "quality_scores": quality_scores,
         "findings": findings,
         "contradictions": contradictions,
+        "guideline_conflicts": guideline_conflicts,
         "step_count": state.get("step_count", 0) + 1,
         "reasoning_trace": trace,
     }
@@ -123,10 +131,13 @@ def orchestrate_synthesis(state: AgentState) -> AgentState:
     question = state["clinical_question"]
     mode = state.get("mode", "scout")
 
+    all_guideline_conflicts = state.get("guideline_conflicts", [])
     synth, verdict, cites = synthesis.run(
         SynthesisInput(
             papers=papers, scores=scores, findings=all_findings,
-            contradictions=all_contradictions, question=question, mode=mode,
+            contradictions=all_contradictions,
+            guideline_conflicts=all_guideline_conflicts,
+            question=question, mode=mode,
         ),
         _client(),
     )
@@ -201,6 +212,7 @@ def run_agent(clinical_question: str, mode: str = "scout") -> AgentState:
         "quality_scores": [],
         "findings": [],
         "contradictions": [],
+        "guideline_conflicts": [],
         "synthesis": None,
         "citations": [],
         "verdict": None,
