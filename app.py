@@ -62,91 +62,85 @@ body, .gradio-container {
 /* ── Input card ──────────────────────────────────────────────────────────── */
 .input-card {
     background: #111118; border: 1px solid #1e1e2e;
-    border-radius: 16px; padding: 18px 20px 14px; margin-bottom: 12px;
+    border-radius: 16px; padding: 18px 20px 16px; margin-bottom: 14px;
 }
-/* Full-width textarea at the top */
-.question-box { margin-bottom: 10px !important; }
-.question-box > label { display: none !important; }   /* hide Gradio label */
-.question-box textarea {
+/* Textarea — full width, visible, 3-line min */
+.question-box { margin-bottom: 12px !important; }
+.question-box > label { display: none !important; }
+.question-box textarea, .question-box .scroll-hide {
     background: #0a0a14 !important; border: 1px solid #1e1e30 !important;
     border-radius: 10px !important; color: #e2e8f0 !important;
     font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
-    resize: none !important; padding: 14px 16px !important; line-height: 1.6 !important;
+    resize: none !important; padding: 14px 16px !important; line-height: 1.65 !important;
+    min-height: 88px !important;
 }
-.question-box textarea::placeholder { color: #2d3555 !important; }
+.question-box textarea::placeholder { color: #2d3a4a !important; }
 .question-box textarea:focus {
-    border-color: #2dd4bf !important; box-shadow: 0 0 0 2px rgba(45,212,191,0.12) !important;
-    outline: none !important;
+    border-color: #2dd4bf !important;
+    box-shadow: 0 0 0 2px rgba(45,212,191,0.1) !important; outline: none !important;
 }
-/* Bottom bar: mode pills left, run button right */
+/* Bottom footer row — use CSS grid so widths are explicit, not Gradio flex */
 .input-footer {
-    display: flex !important; align-items: center !important;
-    justify-content: space-between !important; gap: 12px !important;
-    margin-top: 2px !important;
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    align-items: center !important; gap: 12px !important;
 }
-/* Hide default Gradio row gap overrides inside input-footer */
-.input-footer > div { flex: 0 0 auto !important; }
-/* Mode radio — pills, no outer label */
-.mode-radio > label, .mode-radio .label-wrap { display: none !important; }
+/* Mode radio — hide outer label, horizontal pills */
+.mode-radio > label, .mode-radio > .label-wrap,
+.mode-radio > span { display: none !important; }
 .mode-radio .wrap { gap: 6px !important; flex-wrap: nowrap !important; }
 .mode-radio .wrap label {
-    background: #0f0f1e !important; border: 1px solid #1e1e30 !important;
-    border-radius: 20px !important; padding: 5px 16px !important;
-    color: #4b5563 !important; font-size: 0.78rem !important; font-weight: 500 !important;
-    cursor: pointer !important; transition: all 0.18s !important; white-space: nowrap !important;
+    background: #0e0e1c !important; border: 1px solid #1a1a2e !important;
+    border-radius: 20px !important; padding: 5px 18px !important;
+    color: #4b5563 !important; font-size: 0.79rem !important; font-weight: 500 !important;
+    cursor: pointer !important; transition: all 0.18s !important;
 }
 .mode-radio .wrap label:has(input:checked) {
-    background: rgba(45,212,191,0.12) !important;
-    border-color: #2dd4bf !important; color: #2dd4bf !important;
+    background: rgba(45,212,191,0.1) !important;
+    border-color: rgba(45,212,191,0.5) !important; color: #2dd4bf !important;
 }
-/* Run button */
-.run-btn button, .run-btn {
-    background: linear-gradient(135deg, #0d9488 0%, #2dd4bf 100%) !important;
-    border: none !important; border-radius: 10px !important; color: #001a18 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.86rem !important;
-    font-weight: 700 !important; letter-spacing: 0.4px !important; white-space: nowrap !important;
-    transition: all 0.18s !important; box-shadow: 0 3px 16px rgba(45,212,191,0.3) !important;
-    padding: 0 24px !important; height: 38px !important; min-width: 100px !important;
+/* Run button — stays at auto width, does NOT stretch */
+.run-btn { width: auto !important; }
+.run-btn button {
+    background: linear-gradient(135deg, #0d9488, #2dd4bf) !important;
+    border: none !important; border-radius: 10px !important;
+    color: #011a18 !important; font-family: 'Inter', sans-serif !important;
+    font-size: 0.86rem !important; font-weight: 700 !important;
+    letter-spacing: 0.3px !important; white-space: nowrap !important;
+    padding: 0 26px !important; height: 38px !important;
+    width: auto !important; min-width: 0 !important; max-width: none !important;
+    box-shadow: 0 3px 14px rgba(45,212,191,0.28) !important;
+    transition: all 0.18s !important;
 }
-.run-btn button:hover, .run-btn:hover {
+.run-btn button:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 24px rgba(45,212,191,0.45) !important;
-    background: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%) !important;
+    box-shadow: 0 6px 22px rgba(45,212,191,0.42) !important;
 }
 
 /* ── Example chips ────────────────────────────────────────────────────────── */
-.examples-section { margin-bottom: 16px; }
 .examples-label {
-    color: #2dd4bf; font-size: 0.63rem; font-weight: 700;
-    letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 8px;
-    display: flex; align-items: center; gap: 6px;
+    color: #2dd4bf !important; font-size: 0.62rem !important; font-weight: 700 !important;
+    letter-spacing: 1.5px !important; text-transform: uppercase !important;
+    margin-bottom: 8px !important; opacity: 1 !important;
 }
-.examples-label::before {
-    content: ''; display: inline-block;
-    width: 14px; height: 1px; background: #0d9488;
-}
-.examples-label::after {
-    content: ''; flex: 1; height: 1px; background: #0d2020;
-}
-/* Force all example buttons to be equal width */
-.examples-row > div { flex: 1 1 0 !important; min-width: 0 !important; }
-.example-btn, .example-btn > div { width: 100% !important; }
+/* Equal-width grid for 5 chips */
+.examples-row > div,
+.examples-row > div.svelte-vt1mxs { flex: 1 1 0% !important; min-width: 0 !important; }
+.example-btn { width: 100% !important; }
 .example-btn button {
-    background: rgba(13, 148, 136, 0.07) !important;
-    border: 1px solid rgba(45, 212, 191, 0.18) !important;
-    border-radius: 8px !important; color: #5eead4 !important;
+    background: #071a18 !important;
+    border: 1px solid #0d9488 !important;
+    border-radius: 10px !important; color: #2dd4bf !important;
     font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important;
-    font-weight: 400 !important; transition: all 0.18s !important;
-    white-space: normal !important; text-align: center !important;
-    height: auto !important; min-height: 52px !important;
-    padding: 8px 10px !important; line-height: 1.4 !important;
-    width: 100% !important;
+    font-weight: 500 !important; line-height: 1.45 !important;
+    transition: all 0.18s !important; white-space: normal !important;
+    text-align: center !important; min-height: 56px !important;
+    height: auto !important; padding: 10px 10px !important; width: 100% !important;
 }
 .example-btn button:hover {
-    background: rgba(13, 148, 136, 0.16) !important;
-    border-color: #2dd4bf !important; color: #a7f3d0 !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 14px rgba(45,212,191,0.12) !important;
+    background: #0a2825 !important; border-color: #2dd4bf !important;
+    color: #5eead4 !important; transform: translateY(-1px) !important;
+    box-shadow: 0 4px 16px rgba(45,212,191,0.15) !important;
 }
 
 /* Panel wrappers — identical structure for both columns */
@@ -782,31 +776,28 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
     </div>
     """)
 
-    # ── Input card: textarea on top, mode pills + Run button below ────────────
+    # ── Input card: textarea top, mode pills + Run button bottom ─────────────
     with gr.Group(elem_classes="input-card"):
         question_box = gr.Textbox(
-            label="",
-            placeholder=(
-                "Ask a clinical question or enter a medical myth to investigate…"
-            ),
-            lines=3, elem_classes="question-box",
+            label="", show_label=False,
+            placeholder="Ask a clinical question or enter a medical myth to investigate…",
+            lines=3, min_lines=3, elem_classes="question-box",
         )
         with gr.Row(elem_classes="input-footer"):
             mode_radio = gr.Radio(
                 choices=["scout", "debunker"], value="scout",
-                label="", show_label=False, scale=4,
-                elem_classes="mode-radio",
+                show_label=False, scale=1, elem_classes="mode-radio",
             )
+            # scale=0 → Gradio uses min_width only, button never expands
             run_btn = gr.Button(
-                "Run →", variant="primary", scale=1, min_width=110,
-                elem_classes="run-btn",
+                "Run →", scale=0, min_width=110, elem_classes="run-btn",
             )
 
     # ── Example chips ──────────────────────────────────────────────────────────
     gr.HTML('<div class="examples-label">Try an example</div>')
     with gr.Row(elem_classes="examples-row"):
         for ex_q, ex_m in _EXAMPLES:
-            gr.Button(ex_q, size="sm", elem_classes="example-btn").click(
+            gr.Button(ex_q, elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
             )
