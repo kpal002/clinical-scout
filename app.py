@@ -61,14 +61,16 @@ body, .gradio-container {
 
 .input-card {
     background: #111118; border: 1px solid #1e1e2e;
-    border-radius: 16px; padding: 20px; margin-bottom: 14px;
+    border-radius: 16px; padding: 16px 20px; margin-bottom: 10px;
 }
-.mode-radio label { color: #9ca3af !important; font-size: 0.78rem !important; }
-.mode-radio .wrap { gap: 6px !important; }
+/* Align the radio + question + button row vertically */
+.input-card > .gradio-row { align-items: flex-end !important; }
+.mode-radio label { color: #9ca3af !important; font-size: 0.75rem !important; }
+.mode-radio .wrap { gap: 5px !important; }
 .mode-radio .wrap label {
     background: #1a1a2e !important; border: 1px solid #2a2a3e !important;
-    border-radius: 8px !important; padding: 5px 14px !important;
-    color: #9ca3af !important; font-size: 0.82rem !important;
+    border-radius: 7px !important; padding: 4px 12px !important;
+    color: #9ca3af !important; font-size: 0.79rem !important;
     font-weight: 500 !important; cursor: pointer !important; transition: all 0.2s !important;
 }
 .mode-radio .wrap label:has(input:checked) {
@@ -78,50 +80,77 @@ body, .gradio-container {
 .question-box textarea {
     background: #0d0d1a !important; border: 1px solid #2a2a3e !important;
     border-radius: 10px !important; color: #e2e8f0 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.93rem !important; resize: none !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.9rem !important; resize: none !important;
 }
 .question-box textarea:focus {
     border-color: #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59,130,246,0.15) !important;
 }
-.run-btn {
+/* Compact inline run button */
+.run-btn button, .run-btn {
     background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
-    border: none !important; border-radius: 12px !important; color: white !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.95rem !important;
-    font-weight: 600 !important; height: 50px !important; letter-spacing: 0.3px !important;
-    transition: all 0.2s !important; box-shadow: 0 4px 20px rgba(99,102,241,0.3) !important;
+    border: none !important; border-radius: 10px !important; color: white !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.85rem !important;
+    font-weight: 600 !important; letter-spacing: 0.3px !important; white-space: nowrap !important;
+    transition: all 0.18s !important; box-shadow: 0 3px 14px rgba(99,102,241,0.35) !important;
+    padding: 0 20px !important; height: 42px !important; min-width: 110px !important;
 }
-.run-btn:hover { transform: translateY(-1px) !important; box-shadow: 0 8px 28px rgba(99,102,241,0.45) !important; }
+.run-btn button:hover, .run-btn:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 22px rgba(99,102,241,0.5) !important;
+}
 
-.panel-label {
-    color: #374151; font-size: 0.68rem; font-weight: 600;
+/* Examples strip */
+.examples-strip {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 10px 0 14px; margin-bottom: 4px;
+}
+.examples-label {
+    color: #2d3748; font-size: 0.65rem; font-weight: 600;
+    letter-spacing: 1.2px; text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.example-btn button {
+    background: #0f0f1a !important; border: 1px solid #1e1e30 !important;
+    border-radius: 20px !important; color: #4b5563 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.73rem !important;
+    transition: all 0.18s !important; white-space: nowrap !important;
+    text-align: center !important; height: 30px !important; padding: 0 14px !important;
+}
+.example-btn button:hover {
+    background: #13132a !important; border-color: #3b82f6 !important; color: #60a5fa !important;
+}
+
+/* Panel wrappers — identical structure for both columns */
+.panel-wrap {
+    background: #0d0d18; border: 1px solid #1a1a2a;
+    border-radius: 16px; padding: 20px; min-height: 560px;
+    display: flex; flex-direction: column;
+}
+.panel-hdr {
+    color: #2d3748; font-size: 0.64rem; font-weight: 600;
     letter-spacing: 1.5px; text-transform: uppercase;
-    margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #1a1a2a;
+    margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid #16161f;
+    flex-shrink: 0;
 }
-.log-panel {
+/* Log panel is a gr.HTML — we control all its content via Python */
+.log-panel { padding: 0 !important; border: none !important; background: none !important; }
+/* Synthesis panel is gr.Markdown — wrap to match */
+.synth-outer {
     background: #0d0d18; border: 1px solid #1a1a2a;
-    border-radius: 16px; padding: 22px; min-height: 560px;
+    border-radius: 16px; overflow: hidden; min-height: 560px;
 }
-.synth-panel {
-    background: #0d0d18; border: 1px solid #1a1a2a;
-    border-radius: 16px; padding: 22px; min-height: 560px;
+.synth-inner {
+    padding: 20px;
 }
-.synth-panel h2, .synth-panel h3 { color: #e2e8f0 !important; font-weight: 600 !important; }
-.synth-panel p, .synth-panel li { color: #94a3b8 !important; line-height: 1.7 !important; }
+.synth-inner h2, .synth-inner h3 { color: #e2e8f0 !important; font-weight: 600 !important; }
+.synth-inner p, .synth-inner li { color: #94a3b8 !important; line-height: 1.7 !important; }
+/* Hide default Gradio component labels */
+.hide-label > label, .hide-label label.svelte-1b6s6g { display: none !important; }
+.synth-panel > label, .log-raw > label { display: none !important; }
 .citations-accordion {
     background: #0d0d18 !important; border: 1px solid #1a1a2a !important;
     border-radius: 12px !important; margin-top: 10px;
 }
-.example-btn button {
-    background: #111118 !important; border: 1px solid #1e1e2e !important;
-    border-radius: 8px !important; color: #6b7280 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.75rem !important;
-    transition: all 0.2s !important; white-space: normal !important;
-    text-align: left !important; height: auto !important; padding: 7px 11px !important;
-}
-.example-btn button:hover {
-    background: #1a1a2e !important; border-color: #3b82f6 !important; color: #60a5fa !important;
-}
-.hide-label > label { display: none !important; }
 footer { display: none !important; }
 
 /* ── Agent tree styles ─────────────────────────────────────────────────── */
@@ -328,10 +357,12 @@ def _render(  # pylint: disable=too-many-arguments,R0917
         f'</div>'
     )
     return (
-        '<div class="agent-tree">'
-        '  <div class="orchestrator-header">'
-        '    <div class="orch-dot"></div> Orchestrator Agent'
-        '  </div>'
+        '<div class="panel-wrap">'
+        '  <div class="panel-hdr">🤖 &nbsp;Agent Orchestration</div>'
+        '  <div class="agent-tree">'
+        '    <div class="orchestrator-header">'
+        '      <div class="orch-dot"></div> Orchestrator Agent'
+        '    </div>'
         f'  <div class="agent-row"><div class="branch-line"></div>'
         f'    {_agent_card("📝", "Query Agent", q_state, q_detail, q_state == "active")}'
         f'  </div>'
@@ -343,7 +374,8 @@ def _render(  # pylint: disable=too-many-arguments,R0917
         f'    {_agent_card("🧠", "Synthesis Agent", sy_state, sy_detail, sy_state == "active")}'
         f'  </div>'
         f'  {banner}'
-        f'</div>'
+        '  </div>'
+        '</div>'
     )
 
 
@@ -458,13 +490,22 @@ def _verdict_badge(mode: str, verdict: str) -> str:
 
 
 def _citations_md(papers: List[Paper]) -> str:
-    """Format filtered papers as markdown citation list."""
+    """Format filtered papers as markdown citation list with PubMed links."""
     return "\n\n".join(
         f"**[{i + 1}]** {p['authors']} ({p['year']}). "
         f"*{p['title']}*. {p['journal']}. "
         f"[PubMed {p['pmid']}]({p['url']})"
         for i, p in enumerate(papers)
     )
+
+
+def _strip_citations_section(text: str) -> str:
+    """Remove the ## CITATIONS block from synthesis output (shown separately in accordion)."""
+    for marker in ("\n## CITATIONS", "\n## Citation", "## CITATIONS", "## Citation"):
+        idx = text.find(marker)
+        if idx != -1:
+            return text[:idx].rstrip()
+    return text
 
 
 def _run_parallel_agents(
@@ -563,6 +604,8 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         gl=("pending", ""), sy=("pending", ""),
         banner=""
     ) -> Tuple[str, str, str]:
+        # Prepend synthesis panel header so it always aligns with the log header
+        synth_out = (_SYNTH_HDR + synthesis_md) if synthesis_md else _EMPTY_SYNTH
         return (
             _render(
                 q[0], q[1], r[0], r[1],
@@ -570,7 +613,7 @@ def stream_pipeline(  # pylint: disable=too-many-locals
                 gl[0], gl[1], sy[0], sy[1],
                 banner,
             ),
-            synthesis_md,
+            synth_out,
             citations_md,
         )
 
@@ -664,7 +707,7 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         + (f"  {badge}" if badge else "")
     )
     banner = '<div class="complete-banner">✦ All agents complete — results ready</div>'
-    synthesis_md = synth
+    synthesis_md = _strip_citations_section(synth)
     citations_md = _citations_md(filtered)
 
     yield emit(
@@ -681,27 +724,36 @@ def stream_pipeline(  # pylint: disable=too-many-locals
 
 # ── Gradio UI ─────────────────────────────────────────────────────────────────
 
-_EMPTY_LOG = """
-<div class="empty-state">
-  <div class="icon">🤖</div>
-  <p>Multi-agent pipeline will stream here</p>
-</div>"""
+_EMPTY_LOG = (
+    '<div class="panel-wrap">'
+    '  <div class="panel-hdr">🤖 &nbsp;Agent Orchestration</div>'
+    '  <div class="empty-state">'
+    '    <div class="icon">🤖</div>'
+    '    <p>Multi-agent pipeline will stream here</p>'
+    '  </div>'
+    '</div>'
+)
 
-_EMPTY_SYNTH = """
-<div class="empty-state">
-  <div class="icon">📋</div>
-  <p>Evidence synthesis will appear here</p>
-</div>"""
+_SYNTH_HDR = '<div class="panel-hdr">📋 &nbsp;Evidence Synthesis</div>\n\n'
+
+_EMPTY_SYNTH = (
+    _SYNTH_HDR
+    + '<div class="empty-state">'
+    + '<div class="icon">📋</div>'
+    + '<p>Evidence synthesis will appear here</p>'
+    + '</div>'
+)
 
 with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
 
     gr.HTML("""
     <div class="app-header">
       <h1>Clinical Literature Scout</h1>
-      <p>Multi-agent AI system &nbsp;·&nbsp; Query · Retrieval · Quality · Analysis · Synthesis</p>
+      <p>Multi-agent AI system &nbsp;·&nbsp; Query · Retrieval · Quality · Analysis · Synthesis · Guidelines</p>
     </div>
     """)
 
+    # ── Input card with inline run button ──────────────────────────────────────
     with gr.Group(elem_classes="input-card"):
         with gr.Row():
             mode_radio = gr.Radio(
@@ -715,32 +767,36 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
                     "E.g. What is the evidence for GLP-1 receptor agonists"
                     " in reducing cardiovascular risk?"
                 ),
-                lines=2, scale=4, elem_classes="question-box",
+                lines=2, scale=5, elem_classes="question-box",
+            )
+            run_btn = gr.Button(
+                "Run →", variant="primary", scale=1, elem_classes="run-btn",
             )
 
-    run_btn = gr.Button("Run Agent →", variant="primary", size="lg", elem_classes="run-btn")
-
-    with gr.Row(equal_height=True):
-        with gr.Column(scale=3):
-            gr.HTML('<div class="panel-label">🤖 &nbsp;Agent Orchestration</div>')
-            log_out = gr.HTML(value=_EMPTY_LOG, elem_classes="log-panel hide-label")
-        with gr.Column(scale=2):
-            gr.HTML('<div class="panel-label">📋 &nbsp;Evidence Synthesis</div>')
-            synthesis_out = gr.Markdown(value=_EMPTY_SYNTH, elem_classes="synth-panel hide-label")
-
-    with gr.Accordion("📚 Citations", open=False, elem_classes="citations-accordion"):
-        citations_out = gr.Markdown(value="*Citations will appear after synthesis.*")
-
-    gr.HTML('<div class="panel-label" style="margin-top:20px">💡 &nbsp;Try an example</div>')
-    with gr.Row():
+    # ── Example questions (chips, just below input) ────────────────────────────
+    gr.HTML('<div class="examples-label">💡 &nbsp;Try an example</div>')
+    with gr.Row(elem_classes="examples-strip"):
         for ex_q, ex_m in _EXAMPLES:
-            gr.Button(
-                ex_q[:58] + "…" if len(ex_q) > 58 else ex_q,
-                size="sm", elem_classes="example-btn",
-            ).click(
+            label = ex_q[:52] + "…" if len(ex_q) > 52 else ex_q
+            gr.Button(label, size="sm", elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
             )
+
+    # ── Output panels ──────────────────────────────────────────────────────────
+    with gr.Row(equal_height=True):
+        with gr.Column(scale=3):
+            log_out = gr.HTML(value=_EMPTY_LOG, elem_classes="log-raw")
+        with gr.Column(scale=2):
+            with gr.Group(elem_classes="synth-outer"):
+                synthesis_out = gr.Markdown(
+                    value=_EMPTY_SYNTH,
+                    elem_classes="synth-inner hide-label",
+                )
+
+    # ── Citations accordion (real PubMed links, no duplicates) ─────────────────
+    with gr.Accordion("📚 Citations", open=False, elem_classes="citations-accordion"):
+        citations_out = gr.Markdown(value="*Citations will appear after synthesis.*")
 
     run_btn.click(
         fn=stream_pipeline,
