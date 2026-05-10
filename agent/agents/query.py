@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Dict, List
 
 import anthropic
@@ -47,15 +48,34 @@ def run(
     system = _DEBUNKER_SYSTEM if mode == "debunker" else _SYSTEM
     resp = client.messages.create(
         model="claude-sonnet-4-5",
-        max_tokens=768,
+        max_tokens=1024,
         system=system,
         messages=[{"role": "user", "content": question}],
     )
     raw = resp.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    strategies: Dict[str, List[str]] = json.loads(raw)
+
+    # Strip markdown fences if present
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"\s*```\s*$", "", raw, flags=re.MULTILINE).strip()
+
+    # Attempt JSON parse; fall back to simple keyword queries on failure
+    try:
+        strategies: Dict[str, List[str]] = json.loads(raw)
+    except json.JSONDecodeError:
+        # Extract whatever partial arrays are present, then fill gaps
+        strategies = {}
+        for key in ("systematic_review", "rct", "observational"):
+            match = re.search(
+                rf'"{key}"\s*:\s*(\[.*?\])', raw, re.DOTALL
+            )
+            if match:
+                try:
+                    strategies[key] = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
+
     # Guarantee the three expected keys exist
     for key in ("systematic_review", "rct", "observational"):
-        strategies.setdefault(key, [question])
+        if not strategies.get(key):
+            strategies[key] = [question]
     return strategies
