@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Hugging Face Spaces demo — Clinical Literature Scout + Medical Myth Debunker."""
+"""Hugging Face Spaces demo — Clinical Literature Scout + Medical Myth Debunker.
+
+Multi-agent pipeline streamed live:
+  Orchestrator
+  ├── Query Agent        → 3 specialised search strategies (parallel)
+  ├── Retrieval Agent    → parallel PubMed searches + σ-RAG filter
+  ├── Quality Agent  ┐   → study design scoring          (parallel)
+  ├── Analysis Agent ┘   → findings + contradiction detection
+  └── Synthesis Agent    → claim-level citations
+"""
 from __future__ import annotations
 
-import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Generator, List, Optional
 
 import anthropic
@@ -14,54 +23,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from retrieval.pubmed import fetch_abstracts, search_pubmed  # noqa: E402
-from retrieval.sigma_filter import filter_papers  # noqa: E402
-from agent.state import Paper  # noqa: E402
-
-_MODEL = "claude-sonnet-4-5"
-_SIGMA_THRESHOLD = 1.2
-_SIGMA_RETRY = 0.7
-_MAX_PER_QUERY = 20
-_MAX_FILTERED = 10
-
-_QUERY_SYSTEM = {
-    "scout": (
-        "You are a biomedical librarian expert in PubMed MeSH query formulation. "
-        "Given a clinical question, produce exactly 3 optimised PubMed search queries "
-        "that together cover the topic broadly. Prioritise meta-analyses, systematic "
-        "reviews, and RCTs. Return ONLY a JSON array of 3 strings. No other text."
-    ),
-    "debunker": (
-        "You are a biomedical librarian. Given a medical myth or claim, produce exactly "
-        "3 PubMed search queries that will find scientific evidence about this topic. "
-        "Return ONLY a JSON array of 3 strings. No other text."
-    ),
-}
-
-_SYNTHESIS_SYSTEM = {
-    "scout": (
-        "You are a clinical evidence synthesizer. Given a clinical question and filtered "
-        "abstracts, produce a structured synthesis:\n\n"
-        "## ANSWER\n(Direct answer, 2–3 sentences)\n\n"
-        "## STRENGTH OF EVIDENCE\n(Strong/Moderate/Weak/Insufficient) — one sentence\n\n"
-        "## KEY FINDINGS\n- Bullet points, each citing [N]\n\n"
-        "## LIMITATIONS\n- Key gaps or contradictions\n\n"
-        "## CITATIONS\n[N] Authors (Year). Title. Journal.\n\n"
-        "Cite papers for every specific claim. Never fabricate."
-    ),
-    "debunker": (
-        "You are a medical myth debunker. Given a myth and filtered abstracts, produce:\n\n"
-        "## VERDICT: BUSTED / SUPPORTED / MIXED EVIDENCE\n\n"
-        "## WHAT THE EVIDENCE SAYS\n(2–3 sentences)\n\n"
-        "## KEY STUDIES\n- Bullet points, each citing [N]\n\n"
-        "## COMMON MISCONCEPTION\n(Why people believe it — 1–2 sentences)\n\n"
-        "## CITATIONS\n[N] Authors (Year). Title. Journal.\n\n"
-        "Be direct. Lead with the verdict. Write for a general audience."
-    ),
-}
-
-_VERDICT_COLOR = {"BUSTED": "#22c55e", "SUPPORTED": "#ef4444", "MIXED": "#f59e0b"}
-_VERDICT_LABEL = {"BUSTED": "BUSTED ✓", "SUPPORTED": "SUPPORTED", "MIXED": "MIXED EVIDENCE"}
+from agent.agents import analysis, quality, query, retrieval, synthesis  # noqa: E402
+from agent.agents.quality import summary as quality_summary               # noqa: E402
+from agent.state import Contradiction, Finding, Paper, StudyQuality      # noqa: E402
 
 _EXAMPLES = [
     ["What is the evidence for GLP-1 receptor agonists in reducing cardiovascular risk?", "scout"],
@@ -71,749 +35,621 @@ _EXAMPLES = [
     ["Does vitamin C prevent the common cold?", "debunker"],
 ]
 
+_VERDICT_COLOR = {"BUSTED": "#22c55e", "SUPPORTED": "#ef4444", "MIXED": "#f59e0b"}
+_VERDICT_LABEL = {"BUSTED": "BUSTED ✓", "SUPPORTED": "SUPPORTED", "MIXED": "MIXED EVIDENCE"}
+
 # ── CSS ───────────────────────────────────────────────────────────────────────
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 * { box-sizing: border-box; }
-
 body, .gradio-container {
     font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
     background: #0a0a0f !important;
 }
-
 .gradio-container { max-width: 1400px !important; margin: 0 auto !important; }
 
-/* Header */
-.app-header {
-    padding: 48px 0 32px;
-    text-align: center;
-}
+.app-header { padding: 40px 0 28px; text-align: center; }
 .app-header h1 {
-    font-size: 2.2rem;
-    font-weight: 700;
+    font-size: 2rem; font-weight: 700; margin: 0 0 8px;
     background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0 0 10px;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     letter-spacing: -0.5px;
 }
-.app-header p {
-    color: #6b7280;
-    font-size: 0.95rem;
-    font-weight: 400;
-    margin: 0;
-}
+.app-header p { color: #4b5563; font-size: 0.85rem; margin: 0; }
 
-/* Input row */
 .input-card {
-    background: #111118;
-    border: 1px solid #1e1e2e;
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 16px;
+    background: #111118; border: 1px solid #1e1e2e;
+    border-radius: 16px; padding: 20px; margin-bottom: 14px;
 }
-
-/* Mode radio */
-.mode-radio label { color: #9ca3af !important; font-size: 0.8rem !important; }
-.mode-radio .wrap { gap: 8px !important; }
+.mode-radio label { color: #9ca3af !important; font-size: 0.78rem !important; }
+.mode-radio .wrap { gap: 6px !important; }
 .mode-radio .wrap label {
-    background: #1a1a2e !important;
-    border: 1px solid #2a2a3e !important;
-    border-radius: 8px !important;
-    padding: 6px 16px !important;
-    color: #9ca3af !important;
-    font-size: 0.85rem !important;
-    font-weight: 500 !important;
-    cursor: pointer !important;
-    transition: all 0.2s !important;
+    background: #1a1a2e !important; border: 1px solid #2a2a3e !important;
+    border-radius: 8px !important; padding: 5px 14px !important;
+    color: #9ca3af !important; font-size: 0.82rem !important;
+    font-weight: 500 !important; cursor: pointer !important; transition: all 0.2s !important;
 }
 .mode-radio .wrap label:has(input:checked) {
     background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
-    border-color: transparent !important;
-    color: white !important;
+    border-color: transparent !important; color: white !important;
 }
-
-/* Question box */
 .question-box textarea {
-    background: #0d0d1a !important;
-    border: 1px solid #2a2a3e !important;
-    border-radius: 10px !important;
-    color: #e2e8f0 !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.95rem !important;
-    resize: none !important;
+    background: #0d0d1a !important; border: 1px solid #2a2a3e !important;
+    border-radius: 10px !important; color: #e2e8f0 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.93rem !important; resize: none !important;
 }
 .question-box textarea:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.15) !important;
+    border-color: #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59,130,246,0.15) !important;
 }
-
-/* Run button */
 .run-btn {
     background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
-    border: none !important;
-    border-radius: 12px !important;
-    color: white !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 1rem !important;
-    font-weight: 600 !important;
-    height: 52px !important;
-    letter-spacing: 0.3px !important;
-    transition: all 0.2s !important;
-    box-shadow: 0 4px 24px rgba(99,102,241,0.3) !important;
+    border: none !important; border-radius: 12px !important; color: white !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.95rem !important;
+    font-weight: 600 !important; height: 50px !important; letter-spacing: 0.3px !important;
+    transition: all 0.2s !important; box-shadow: 0 4px 20px rgba(99,102,241,0.3) !important;
 }
-.run-btn:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 8px 32px rgba(99,102,241,0.45) !important;
-}
+.run-btn:hover { transform: translateY(-1px) !important; box-shadow: 0 8px 28px rgba(99,102,241,0.45) !important; }
 
-/* Panel labels */
 .panel-label {
-    color: #4b5563;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #1e1e2e;
+    color: #374151; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #1a1a2a;
 }
-
-/* Agent log panel */
 .log-panel {
-    background: #0d0d18;
-    border: 1px solid #1a1a2a;
-    border-radius: 16px;
-    padding: 24px;
-    min-height: 520px;
+    background: #0d0d18; border: 1px solid #1a1a2a;
+    border-radius: 16px; padding: 22px; min-height: 560px;
 }
-
-/* Synthesis panel */
 .synth-panel {
-    background: #0d0d18;
-    border: 1px solid #1a1a2a;
-    border-radius: 16px;
-    padding: 24px;
-    min-height: 520px;
+    background: #0d0d18; border: 1px solid #1a1a2a;
+    border-radius: 16px; padding: 22px; min-height: 560px;
 }
-.synth-panel h2, .synth-panel h3 {
-    color: #e2e8f0 !important;
-    font-weight: 600 !important;
-}
+.synth-panel h2, .synth-panel h3 { color: #e2e8f0 !important; font-weight: 600 !important; }
 .synth-panel p, .synth-panel li { color: #94a3b8 !important; line-height: 1.7 !important; }
-
-/* Citations accordion */
 .citations-accordion {
-    background: #0d0d18 !important;
-    border: 1px solid #1a1a2a !important;
-    border-radius: 12px !important;
-    margin-top: 12px;
+    background: #0d0d18 !important; border: 1px solid #1a1a2a !important;
+    border-radius: 12px !important; margin-top: 10px;
 }
-
-/* Example buttons */
 .example-btn button {
-    background: #111118 !important;
-    border: 1px solid #2a2a3e !important;
-    border-radius: 8px !important;
-    color: #94a3b8 !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.78rem !important;
-    transition: all 0.2s !important;
-    white-space: normal !important;
-    text-align: left !important;
-    height: auto !important;
-    padding: 8px 12px !important;
-    line-height: 1.4 !important;
+    background: #111118 !important; border: 1px solid #1e1e2e !important;
+    border-radius: 8px !important; color: #6b7280 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.75rem !important;
+    transition: all 0.2s !important; white-space: normal !important;
+    text-align: left !important; height: auto !important; padding: 7px 11px !important;
 }
 .example-btn button:hover {
-    background: #1a1a2e !important;
-    border-color: #3b82f6 !important;
-    color: #60a5fa !important;
+    background: #1a1a2e !important; border-color: #3b82f6 !important; color: #60a5fa !important;
+}
+.hide-label > label { display: none !important; }
+footer { display: none !important; }
+
+/* ── Agent tree styles ─────────────────────────────────────────────────── */
+.agent-tree { display: flex; flex-direction: column; gap: 0; }
+
+.orchestrator-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; margin-bottom: 12px;
+    background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(168,85,247,0.05));
+    border: 1px solid rgba(99,102,241,0.2); border-radius: 10px;
+    font-size: 0.82rem; font-weight: 600; color: #a78bfa;
+}
+.orch-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #6366f1; box-shadow: 0 0 8px #6366f1;
+    animation: orch-pulse 2s ease-in-out infinite;
+}
+@keyframes orch-pulse {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
 }
 
-/* Pipeline steps (rendered as HTML inside gr.HTML) */
-.pipeline { display: flex; flex-direction: column; gap: 0; }
-
-.step-item {
-    display: flex;
-    gap: 16px;
-    position: relative;
-}
-.step-item:not(:last-child)::before {
+.agent-row { display: flex; gap: 0; position: relative; padding-left: 20px; }
+.agent-row::before {
     content: '';
-    position: absolute;
-    left: 15px;
-    top: 36px;
-    bottom: -8px;
-    width: 2px;
-    background: linear-gradient(to bottom, #2a2a3e, transparent);
+    position: absolute; left: 8px; top: 0; bottom: 0;
+    width: 1px; background: #1e1e2e;
+}
+.agent-row:last-child::before { bottom: 50%; }
+
+.branch-line {
+    position: absolute; left: 8px; top: 50%; width: 12px; height: 1px;
+    background: #2a2a3e;
 }
 
-.step-dot {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8rem;
-    margin-top: 4px;
+.agent-card {
+    flex: 1; margin: 4px 0 4px 12px;
+    background: #111118; border: 1px solid #1e1e2e;
+    border-radius: 10px; padding: 10px 14px;
+    transition: border-color 0.3s;
+}
+.agent-card.active { border-color: #3b82f6; box-shadow: 0 0 12px rgba(59,130,246,0.12); }
+.agent-card.done   { border-color: #1a3a2a; }
+.agent-card.error  { border-color: #7f1d1d; }
+
+.agent-card-header {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.8rem; font-weight: 600; margin-bottom: 6px;
+}
+.agent-card-header.pending { color: #374151; }
+.agent-card-header.active  { color: #60a5fa; }
+.agent-card-header.done    { color: #34d399; }
+.agent-card-header.error   { color: #ef4444; }
+
+.status-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.status-dot.pending { background: #1f2937; border: 1px solid #374151; }
+.status-dot.active  { background: #3b82f6; box-shadow: 0 0 6px #3b82f6; animation: blink 1s ease-in-out infinite; }
+.status-dot.done    { background: #22c55e; }
+.status-dot.error   { background: #ef4444; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.thinking {
+    display: inline-flex; gap: 3px; align-items: center; margin-left: 4px;
+}
+.thinking span {
+    width: 3px; height: 3px; border-radius: 50%; background: #6366f1;
+    animation: bounce 1.1s ease-in-out infinite;
+}
+.thinking span:nth-child(2) { animation-delay: 0.18s; }
+.thinking span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-4px);opacity:1} }
+
+.agent-detail {
+    font-size: 0.74rem; color: #4b5563; line-height: 1.6;
+    padding-left: 15px;
+}
+.agent-detail.visible { color: #6b7280; }
+
+/* parallel bracket */
+.parallel-group {
+    margin: 4px 0 4px 12px; padding-left: 12px;
+    border-left: 2px solid #1e3a5f;
+    display: flex; flex-direction: column; gap: 4px;
     position: relative;
-    z-index: 1;
 }
-.step-dot.done {
-    background: linear-gradient(135deg, #059669, #34d399);
-    color: white;
-    box-shadow: 0 0 12px rgba(52,211,153,0.3);
-}
-.step-dot.active {
-    background: linear-gradient(135deg, #3b82f6, #6366f1);
-    color: white;
-    box-shadow: 0 0 16px rgba(99,102,241,0.5);
-    animation: pulse-dot 1.5s ease-in-out infinite;
-}
-.step-dot.pending {
-    background: #1a1a2a;
-    border: 1px solid #2a2a3e;
-    color: #4b5563;
+.parallel-label {
+    font-size: 0.65rem; font-weight: 600; color: #1e3a5f;
+    letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 2px;
 }
 
-@keyframes pulse-dot {
-    0%, 100% { box-shadow: 0 0 16px rgba(99,102,241,0.5); }
-    50% { box-shadow: 0 0 28px rgba(99,102,241,0.8); }
-}
-
-.step-body { flex: 1; padding-bottom: 24px; }
-
-.step-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #e2e8f0;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    line-height: 1.4;
-    padding-top: 6px;
-}
-.step-title.active { color: #60a5fa; }
-.step-title.done { color: #34d399; }
-
-.thinking-dots {
-    display: inline-flex;
-    gap: 3px;
-    align-items: center;
-}
-.thinking-dots span {
-    width: 4px; height: 4px;
-    background: #6366f1;
-    border-radius: 50%;
-    animation: bounce 1.2s ease-in-out infinite;
-}
-.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
-.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes bounce {
-    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-    40% { transform: translateY(-4px); opacity: 1; }
-}
-
-.step-content { margin-top: 6px; }
-
-.query-tag {
-    display: inline-block;
-    background: #0f172a;
-    border: 1px solid #1e3a5f;
-    border-radius: 6px;
-    padding: 3px 10px;
+/* inline tags */
+.tag {
+    display: inline-block; padding: 1px 7px;
+    border-radius: 4px; font-size: 0.68rem; font-weight: 500;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    color: #7dd3fc;
-    margin: 2px 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
 }
-
-.result-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 4px 0;
-    font-size: 0.82rem;
-    color: #6b7280;
-}
-.result-count {
-    color: #60a5fa;
-    font-weight: 600;
-    font-size: 0.82rem;
-}
+.tag-blue  { background: #0f172a; border: 1px solid #1e3a5f; color: #7dd3fc; }
+.tag-green { background: #052e16; border: 1px solid #14532d; color: #4ade80; }
+.tag-amber { background: #1c1003; border: 1px solid #713f12; color: #fbbf24; }
+.tag-gray  { background: #111118; border: 1px solid #2a2a3e; color: #6b7280; }
 
 .sigma-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 8px;
-    font-size: 0.78rem;
+    width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.72rem;
 }
 .sigma-table th {
-    color: #4b5563;
-    font-weight: 500;
-    text-align: left;
-    padding: 4px 8px;
-    border-bottom: 1px solid #1e1e2e;
-    font-size: 0.7rem;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    color: #374151; font-weight: 500; text-align: left; padding: 3px 7px;
+    border-bottom: 1px solid #1e1e2e; font-size: 0.65rem;
+    letter-spacing: 0.5px; text-transform: uppercase;
 }
-.sigma-table td {
-    padding: 5px 8px;
-    color: #6b7280;
-    border-bottom: 1px solid #111118;
-    vertical-align: middle;
-}
-.sigma-table td.pass { color: #34d399; font-weight: 500; }
-.sigma-table td.fail { color: #4b5563; }
-.sigma-score-pass { color: #34d399; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
-.sigma-score-fail { color: #374151; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+.sigma-table td { padding: 4px 7px; color: #6b7280; border-bottom: 1px solid #0d0d18; }
+.sigma-table td.pass { color: #34d399; }
+.sigma-table td.fail { color: #374151; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
 
-.stat-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #111118;
-    border: 1px solid #1e1e2e;
-    border-radius: 20px;
-    padding: 4px 12px;
-    font-size: 0.78rem;
-    color: #6b7280;
-    margin: 2px;
-}
-.stat-pill strong { color: #e2e8f0; }
-
-.verdict-badge {
-    display: inline-block;
-    padding: 6px 18px;
-    border-radius: 20px;
-    font-weight: 700;
-    font-size: 0.85rem;
-    letter-spacing: 0.5px;
-    margin-top: 8px;
+.finding-row { display: flex; gap: 6px; align-items: flex-start; margin: 3px 0; font-size: 0.75rem; }
+.finding-dir { flex-shrink: 0; font-size: 0.7rem; }
+.contradiction-row {
+    background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.15);
+    border-radius: 6px; padding: 5px 8px; margin: 3px 0; font-size: 0.73rem; color: #92400e;
 }
 
 .complete-banner {
-    background: linear-gradient(135deg, rgba(5,150,105,0.1), rgba(52,211,153,0.05));
-    border: 1px solid rgba(52,211,153,0.2);
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin-top: 16px;
-    color: #34d399;
-    font-size: 0.82rem;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    background: linear-gradient(135deg,rgba(5,150,105,.08),rgba(52,211,153,.04));
+    border: 1px solid rgba(52,211,153,.18); border-radius: 8px;
+    padding: 10px 14px; margin-top: 14px;
+    color: #34d399; font-size: 0.78rem; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
 }
-
 .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 300px;
-    color: #374151;
-    gap: 12px;
-    text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 300px; color: #1f2937; gap: 10px; text-align: center;
 }
-.empty-state .icon { font-size: 2.5rem; opacity: 0.3; }
-.empty-state p { font-size: 0.85rem; margin: 0; }
-
-/* Hide gradio label clutter */
-.hide-label > label { display: none !important; }
-footer { display: none !important; }
+.empty-state .icon { font-size: 2rem; opacity: .25; }
+.empty-state p { font-size: 0.8rem; margin: 0; }
 """
 
-# ── HTML helpers ──────────────────────────────────────────────────────────────
-
-def _dot(state: str, num: int) -> str:
-    icons = {"done": "✓", "active": str(num), "pending": str(num)}
-    return f'<div class="step-dot {state}">{icons[state]}</div>'
-
+# ── HTML rendering helpers ────────────────────────────────────────────────────
 
 def _thinking() -> str:
+    return '<span class="thinking"><span></span><span></span><span></span></span>'
+
+
+def _tag(text: str, kind: str = "gray") -> str:
+    return f'<span class="tag tag-{kind}">{text}</span>'
+
+
+def _status_dot(state: str) -> str:
+    return f'<span class="status-dot {state}"></span>'
+
+
+def _agent_card(
+    icon: str,
+    name: str,
+    state: str,  # "pending" | "active" | "done" | "error"
+    detail: str = "",
+    thinking: bool = False,
+) -> str:
+    suffix = _thinking() if thinking else ""
+    detail_html = (
+        f'<div class="agent-detail visible">{detail}</div>' if detail else ""
+    )
     return (
-        '<span class="thinking-dots">'
-        '<span></span><span></span><span></span>'
-        '</span>'
+        f'<div class="agent-card {state}">'
+        f'  <div class="agent-card-header {state}">'
+        f'    {_status_dot(state)} {icon} {name}{suffix}'
+        f'  </div>'
+        f'  {detail_html}'
+        f'</div>'
     )
 
 
-def _step_html(
-    num: int,
-    icon: str,
-    title: str,
-    state: str,
-    body: str = "",
-    last: bool = False,
+def _render(
+    q_state: str, q_detail: str,
+    r_state: str, r_detail: str,
+    qa_state: str, qa_detail: str,
+    an_state: str, an_detail: str,
+    sy_state: str, sy_detail: str,
+    banner: str = "",
 ) -> str:
-    title_class = {"done": "done", "active": "active", "pending": ""}.get(state, "")
-    suffix = _thinking() if state == "active" else ""
-    connector = "" if last else ""
-    return f"""
-<div class="step-item" {'style="padding-bottom:0"' if last else ''}>
-  {_dot(state, num)}
-  <div class="step-body" {'style="padding-bottom:8px"' if last else ''}>
-    <div class="step-title {title_class}">{icon} {title} {suffix}</div>
-    <div class="step-content">{body}</div>
-  </div>
-</div>
-{connector}"""
+    parallel_block = (
+        f'<div class="agent-row">'
+        f'  <div class="branch-line"></div>'
+        f'  <div class="parallel-group">'
+        f'    <div class="parallel-label">⚡ parallel</div>'
+        f'    {_agent_card("📊", "Quality Agent", qa_state, qa_detail, qa_state == "active")}'
+        f'    {_agent_card("🔬", "Analysis Agent", an_state, an_detail, an_state == "active")}'
+        f'  </div>'
+        f'</div>'
+    )
+    return (
+        '<div class="agent-tree">'
+        '  <div class="orchestrator-header">'
+        '    <div class="orch-dot"></div> Orchestrator Agent'
+        '  </div>'
+        f'  <div class="agent-row"><div class="branch-line"></div>'
+        f'    {_agent_card("📝", "Query Agent", q_state, q_detail, q_state == "active")}'
+        f'  </div>'
+        f'  <div class="agent-row"><div class="branch-line"></div>'
+        f'    {_agent_card("🔍", "Retrieval Agent", r_state, r_detail, r_state == "active")}'
+        f'  </div>'
+        f'  {parallel_block}'
+        f'  <div class="agent-row"><div class="branch-line"></div>'
+        f'    {_agent_card("🧠", "Synthesis Agent", sy_state, sy_detail, sy_state == "active")}'
+        f'  </div>'
+        f'  {banner}'
+        f'</div>'
+    )
 
 
-def _pipeline_html(steps: list[dict]) -> str:
-    items = ""
-    for i, s in enumerate(steps):
-        items += _step_html(
-            num=i + 1,
-            icon=s["icon"],
-            title=s["title"],
-            state=s["state"],
-            body=s.get("body", ""),
-            last=(i == len(steps) - 1),
-        )
-    return f'<div class="pipeline">{items}</div>'
+def _sigma_row(title: str, score: float, passed: bool) -> str:
+    short = (title[:62] + "…") if len(title) > 62 else title
+    icon = "✓" if passed else "✗"
+    td = "pass" if passed else "fail"
+    score_cls = "mono pass" if passed else "mono fail"
+    return (
+        f"<tr>"
+        f'<td class="{td}" style="max-width:340px;overflow:hidden;'
+        f'text-overflow:ellipsis;white-space:nowrap">{short}</td>'
+        f'<td><span class="{score_cls}">{score:.2f}σ</span></td>'
+        f'<td class="{td}">{icon}</td>'
+        f"</tr>"
+    )
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
-def _client() -> anthropic.Anthropic:
+def _get_client() -> anthropic.Anthropic:
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not key:
         raise ValueError("ANTHROPIC_API_KEY is not set in Space secrets.")
     return anthropic.Anthropic(api_key=key)
 
 
-def _formulate_queries(question: str, mode: str) -> List[str]:
-    resp = _client().messages.create(
-        model=_MODEL,
-        max_tokens=512,
-        system=_QUERY_SYSTEM[mode],
-        messages=[{"role": "user", "content": question}],
-    )
-    raw = resp.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    return json.loads(raw)
-
-
-def _synthesize(papers: List[Paper], question: str, mode: str) -> str:
-    label = "Medical Myth" if mode == "debunker" else "Clinical Question"
-    numbered = "\n\n".join(
-        f"[{i + 1}] {p['authors']} ({p['year']}) — {p['journal']}\n"
-        f"Title: {p['title']}\nAbstract: {p['abstract'][:1200]}"
-        for i, p in enumerate(papers)
-    )
-    resp = _client().messages.create(
-        model=_MODEL,
-        max_tokens=2048,
-        system=_SYNTHESIS_SYSTEM[mode],
-        messages=[{"role": "user", "content": f"{label}: {question}\n\nPapers:\n{numbered}"}],
-    )
-    return resp.content[0].text.strip()
-
-
-def _extract_verdict(synthesis: str) -> Optional[str]:
-    for line in synthesis.splitlines():
-        upper = line.upper()
-        if "BUSTED" in upper:
-            return "BUSTED"
-        if "SUPPORTED" in upper:
-            return "SUPPORTED"
-        if "MIXED" in upper:
-            return "MIXED"
-    return None
-
-
 def stream_pipeline(
     question: str, mode: str
 ) -> Generator[tuple[str, str, str], None, None]:
+    """Run the multi-agent pipeline and yield (log_html, synthesis_md, citations_md)."""
 
-    synthesis = ""
-    citations = ""
+    synthesis_md = ""
+    citations_md = ""
 
-    def _render(steps: list[dict], banner: str = "") -> str:
-        return _pipeline_html(steps) + banner
+    # Initial state — all pending
+    def emit(
+        q=("pending", ""), r=("pending", ""),
+        qa=("pending", ""), an=("pending", ""),
+        sy=("pending", ""), banner=""
+    ) -> tuple[str, str, str]:
+        return (
+            _render(q[0], q[1], r[0], r[1], qa[0], qa[1], an[0], an[1], sy[0], sy[1], banner),
+            synthesis_md,
+            citations_md,
+        )
 
     if not question.strip():
-        err = '<p style="color:#ef4444;font-size:0.85rem">⚠ Please enter a question.</p>'
-        yield err, synthesis, citations
+        err = '<p style="color:#ef4444;font-size:0.82rem">⚠ Please enter a question.</p>'
+        yield err, synthesis_md, citations_md
         return
 
     try:
-        _client()
+        client = _get_client()
     except ValueError as exc:
-        err = f'<p style="color:#ef4444;font-size:0.85rem">❌ {exc}</p>'
+        err = f'<p style="color:#ef4444;font-size:0.82rem">❌ {exc}</p>'
         yield err, "", ""
         return
 
-    steps = [
-        {"icon": "🔍", "title": "Formulating PubMed Queries", "state": "active", "body": ""},
-        {"icon": "📡", "title": "Searching PubMed", "state": "pending", "body": ""},
-        {"icon": "📄", "title": "Fetching Abstracts", "state": "pending", "body": ""},
-        {"icon": "🔬", "title": "σ-RAG Significance Filter", "state": "pending", "body": ""},
-        {"icon": "🧠", "title": "Evidence Synthesis", "state": "pending", "body": ""},
-    ]
-    yield _render(steps), synthesis, citations
+    # ── Query Agent ────────────────────────────────────────────────────────────
+    yield emit(q=("active", ""))
 
-    # Step 1
     try:
-        queries = _formulate_queries(question, mode)
+        strategies = query.run(question, mode, client)
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        steps[0]["body"] = f'<p style="color:#ef4444;font-size:0.8rem">❌ {exc}</p>'
-        steps[0]["state"] = "done"
-        yield _render(steps), synthesis, citations
+        yield emit(q=("error", f"❌ {exc}"))
         return
 
-    q_html = "".join(
-        f'<div style="margin:4px 0"><span class="query-tag">{q}</span></div>'
-        for q in queries
+    flat_queries = [q_ for qs in strategies.values() for q_ in qs]
+    strategy_tags = " ".join(
+        _tag(name.replace("_", " "), "blue")
+        for name in strategies
     )
-    steps[0]["body"] = q_html
-    steps[0]["state"] = "done"
-    steps[1]["state"] = "active"
-    yield _render(steps), synthesis, citations
-
-    # Step 2
-    all_pmids: set[str] = set()
-    result_rows = ""
-    for q in queries:
-        try:
-            pmids = search_pubmed(q, max_results=_MAX_PER_QUERY)
-        except Exception:  # pylint: disable=broad-exception-caught
-            pmids = []
-        all_pmids.update(pmids)
-        short_q = (q[:55] + "…") if len(q) > 55 else q
-        result_rows += (
-            f'<div class="result-row">'
-            f'<span class="query-tag" style="max-width:320px">{short_q}</span>'
-            f'<span>→</span>'
-            f'<span class="result-count">{len(pmids)}</span>'
-            f'<span style="color:#4b5563">results</span>'
-            f'</div>'
+    q_detail = (
+        f'{strategy_tags}<br>'
+        + "  ".join(
+            f'<span class="mono" style="color:#4b5563">{q_[:55]}…</span>'
+            if len(q_) > 55 else f'<span class="mono" style="color:#4b5563">{q_}</span>'
+            for q_ in flat_queries[:6]
         )
-        steps[1]["body"] = result_rows
-        yield _render(steps), synthesis, citations
-
-    unique_pmids = list(all_pmids)
-    steps[1]["body"] = result_rows + (
-        f'<div class="stat-pill" style="margin-top:8px">'
-        f'Total unique PMIDs: <strong>{len(unique_pmids)}</strong>'
-        f'</div>'
     )
-    steps[1]["state"] = "done"
-    steps[2]["state"] = "active"
-    yield _render(steps), synthesis, citations
+    yield emit(q=("done", q_detail))
 
-    if not unique_pmids:
-        steps[2]["body"] = '<p style="color:#f59e0b;font-size:0.8rem">⚠ No results. Try rephrasing.</p>'
-        steps[2]["state"] = "done"
-        yield _render(steps), synthesis, citations
-        return
+    # ── Retrieval Agent ────────────────────────────────────────────────────────
+    yield emit(q=("done", q_detail), r=("active", ""))
 
-    # Step 3
-    try:
-        papers = fetch_abstracts(unique_pmids)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        steps[2]["body"] = f'<p style="color:#ef4444;font-size:0.8rem">❌ {exc}</p>'
-        steps[2]["state"] = "done"
-        yield _render(steps), synthesis, citations
-        return
+    # Run 3 strategy searches in parallel; stream per-strategy counts live
+    from retrieval import pubmed as _pubmed, sigma_filter as _sf  # noqa: E402
 
-    no_abstract = len(unique_pmids) - len(papers)
-    steps[2]["body"] = (
-        f'<div class="stat-pill"><strong>{len(papers)}</strong> abstracts fetched</div>'
-        f'<div class="stat-pill" style="color:#4b5563"><strong>{no_abstract}</strong> had none</div>'
-    )
-    steps[2]["state"] = "done"
-    steps[3]["state"] = "active"
-    yield _render(steps), synthesis, citations
+    all_papers_map: dict[str, Paper] = {}
+    r_detail_parts: list[str] = []
 
-    # Step 4
-    threshold = _SIGMA_THRESHOLD
-    table_rows = ""
+    def _search_one(name: str, queries: list[str]) -> tuple[str, list[Paper]]:
+        pmids: set[str] = set()
+        for q_ in queries:
+            try:
+                pmids.update(_pubmed.search_pubmed(q_, max_results=20))
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+        papers_ = _pubmed.fetch_abstracts(list(pmids)) if pmids else []
+        return name, papers_
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futs = {
+            pool.submit(_search_one, name, qs): name
+            for name, qs in strategies.items() if qs
+        }
+        for fut in as_completed(futs):
+            name_, papers_ = fut.result()
+            for p in papers_:
+                all_papers_map.setdefault(p["pmid"], p)
+            label = name_.replace("_", " ")
+            r_detail_parts.append(
+                f'{_tag(label, "blue")} → {_tag(str(len(papers_)) + " papers", "gray")}'
+            )
+            yield emit(
+                q=("done", q_detail),
+                r=("active", "  ".join(r_detail_parts)),
+            )
+
+    raw_papers = list(all_papers_map.values())
+
+    # σ-RAG filter with live table
+    sigma_rows = ""
 
     def _cb(title: str, score: float, passed: bool) -> None:
-        nonlocal table_rows
-        short = (title[:60] + "…") if len(title) > 60 else title
-        icon = "✓" if passed else "✗"
-        score_cls = "sigma-score-pass" if passed else "sigma-score-fail"
-        td_cls = "pass" if passed else "fail"
-        table_rows += (
-            f"<tr>"
-            f'<td class="{td_cls}" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{short}</td>'
-            f'<td><span class="{score_cls}">{score:.2f}σ</span></td>'
-            f'<td class="{td_cls}">{icon}</td>'
-            f"</tr>"
-        )
+        nonlocal sigma_rows
+        sigma_rows += _sigma_row(title, score, passed)
 
-    def _table() -> str:
-        return (
-            '<table class="sigma-table">'
-            '<thead><tr><th>Paper</th><th>Score</th><th></th></tr></thead>'
-            f'<tbody>{table_rows}</tbody>'
-            '</table>'
-        )
-
-    steps[3]["body"] = _table()
-    filtered = filter_papers(
-        papers, question,
-        sigma_threshold=threshold,
-        max_results=_MAX_FILTERED,
+    filtered = _sf.filter_papers(
+        raw_papers, question, sigma_threshold=1.2, max_results=12,
         progress_callback=_cb,
     )
-
-    if not filtered and papers:
-        table_rows = ""
-        threshold = _SIGMA_RETRY
-        steps[3]["body"] = (
-            f'<p style="color:#f59e0b;font-size:0.78rem;margin:4px 0">'
-            f'Nothing passed {_SIGMA_THRESHOLD}σ — retrying at {threshold}σ…</p>'
-            + _table()
-        )
-        yield _render(steps), synthesis, citations
-        filtered = filter_papers(
-            papers, question,
-            sigma_threshold=threshold,
-            max_results=_MAX_FILTERED,
+    if not filtered and raw_papers:
+        sigma_rows = ""
+        filtered = _sf.filter_papers(
+            raw_papers, question, sigma_threshold=0.7, max_results=12,
             progress_callback=_cb,
         )
 
-    steps[3]["body"] = (
-        _table()
-        + f'<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:4px">'
-        f'<div class="stat-pill"><strong>{len(papers)}</strong> retrieved</div>'
-        f'<div class="stat-pill" style="color:#34d399"><strong>{len(filtered)}</strong> passed</div>'
-        f'<div class="stat-pill" style="color:#4b5563"><strong>{len(papers) - len(filtered)}</strong> filtered</div>'
-        f'</div>'
+    sigma_table = (
+        '<table class="sigma-table"><thead><tr>'
+        '<th>Paper</th><th>σ score</th><th></th>'
+        f'</tr></thead><tbody>{sigma_rows}</tbody></table>'
     )
-    steps[3]["state"] = "done"
-    steps[4]["state"] = "active"
-    yield _render(steps), synthesis, citations
+    r_detail_full = (
+        "  ".join(r_detail_parts)
+        + f'<br>{_tag(str(len(raw_papers)) + " raw", "gray")} → '
+        + f'{_tag(str(len(filtered)) + " passed σ-RAG", "green")}'
+        + sigma_table
+    )
+    r_ok = bool(filtered)
+    r_final_state = "done" if r_ok else "error"
+    yield emit(
+        q=("done", q_detail),
+        r=(r_final_state, r_detail_full),
+    )
 
     if not filtered:
-        steps[4]["body"] = '<p style="color:#f59e0b;font-size:0.8rem">⚠ No papers cleared threshold. Try rephrasing.</p>'
-        steps[4]["state"] = "done"
-        yield _render(steps), synthesis, citations
+        yield emit(
+            q=("done", q_detail),
+            r=("error", r_detail_full + '<br><span style="color:#f59e0b;font-size:0.72rem">⚠ No papers cleared threshold.</span>'),
+        )
         return
 
-    # Step 5
+    # ── Quality Agent ∥ Analysis Agent ────────────────────────────────────────
+    yield emit(
+        q=("done", q_detail), r=("done", r_detail_full),
+        qa=("active", ""), an=("active", ""),
+    )
+
+    quality_scores: List[StudyQuality] = []
+    findings: List[Finding] = []
+    contradictions: List[Contradiction] = []
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        q_fut = pool.submit(quality.run, filtered)
+        a_fut = pool.submit(analysis.run, filtered, question, mode, client)
+        for fut in as_completed([q_fut, a_fut]):
+            result = fut.result()
+            if fut is q_fut:
+                quality_scores = result
+            else:
+                findings, contradictions = result
+
+    # Quality detail
+    lvl_counts: dict[int, int] = {}
+    for s in quality_scores:
+        lvl_counts[s["level"]] = lvl_counts.get(s["level"], 0) + 1
+    lvl_labels = {5: ("meta-analyses", "green"), 4: ("RCTs", "blue"), 3: ("cohort", "gray"), 2: ("case-ctrl", "gray"), 1: ("opinion", "gray")}
+    qa_detail = "  ".join(
+        f'{_tag(str(cnt) + " " + lvl_labels.get(lvl, ("other", "gray"))[0], lvl_labels.get(lvl, ("other", "gray"))[1])}'
+        for lvl, cnt in sorted(lvl_counts.items(), reverse=True)
+    )
+
+    # Analysis detail
+    dir_icon = {"positive": "↑", "negative": "↓", "neutral": "→"}
+    findings_html = "".join(
+        f'<div class="finding-row">'
+        f'  <span class="finding-dir" style="color:{"#34d399" if f["direction"]=="positive" else "#ef4444" if f["direction"]=="negative" else "#6b7280"}">'
+        f'  {dir_icon.get(f["direction"], "→")}</span>'
+        f'  <span style="color:#6b7280">{f["claim"][:90]}{"…" if len(f["claim"])>90 else ""}</span>'
+        f'</div>'
+        for f in findings[:5]
+    )
+    contra_html = "".join(
+        f'<div class="contradiction-row">⚡ {c["topic"]}</div>'
+        for c in contradictions[:3]
+    )
+    an_detail = findings_html + (contra_html if contradictions else "")
+
+    yield emit(
+        q=("done", q_detail), r=("done", r_detail_full),
+        qa=("done", qa_detail), an=("done", an_detail),
+        sy=("active", ""),
+    )
+
+    # ── Synthesis Agent ────────────────────────────────────────────────────────
     try:
-        synthesis = _synthesize(filtered, question, mode)
+        synth, verdict, cites = synthesis.run(
+            filtered, quality_scores, findings, contradictions, question, mode, client
+        )
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        steps[4]["body"] = f'<p style="color:#ef4444;font-size:0.8rem">❌ {exc}</p>'
-        steps[4]["state"] = "done"
-        yield _render(steps), synthesis, citations
+        yield emit(
+            q=("done", q_detail), r=("done", r_detail_full),
+            qa=("done", qa_detail), an=("done", an_detail),
+            sy=("error", f"❌ {exc}"),
+        )
         return
 
     verdict_html = ""
-    if mode == "debunker":
-        verdict = _extract_verdict(synthesis)
-        if verdict:
-            color = _VERDICT_COLOR.get(verdict, "#6b7280")
-            label = _VERDICT_LABEL.get(verdict, verdict)
-            verdict_html = (
-                f'<div class="verdict-badge" style="background:rgba(0,0,0,0.4);'
-                f'border:1px solid {color};color:{color}">{label}</div>'
-            )
-
-    steps[4]["body"] = (
-        f'<div class="stat-pill"><strong>{len(filtered)}</strong> high-signal abstracts synthesized</div>'
-        + verdict_html
+    if mode == "debunker" and verdict:
+        color = _VERDICT_COLOR.get(verdict, "#6b7280")
+        label = _VERDICT_LABEL.get(verdict, verdict)
+        verdict_html = (
+            f'<span style="background:rgba(0,0,0,.4);border:1px solid {color};'
+            f'color:{color};padding:2px 10px;border-radius:12px;font-size:0.72rem;'
+            f'font-weight:700;margin-top:4px;display:inline-block">{label}</span>'
+        )
+    sy_detail = (
+        f'{_tag(str(len(filtered)) + " papers synthesized", "green")}'
+        + (f"  {verdict_html}" if verdict_html else "")
     )
-    steps[4]["state"] = "done"
 
     banner = (
-        '<div class="complete-banner">'
-        '✦ Pipeline complete — results ready'
-        '</div>'
+        '<div class="complete-banner">✦ All agents complete — results ready</div>'
     )
-    yield _render(steps, banner), synthesis, citations
 
-    citations = "\n\n".join(
+    synthesis_md = synth
+    citations_md = "\n\n".join(
         f"**[{i + 1}]** {p['authors']} ({p['year']}). "
         f"*{p['title']}*. {p['journal']}. "
         f"[PubMed {p['pmid']}]({p['url']})"
         for i, p in enumerate(filtered)
     )
-    yield _render(steps, banner), synthesis, citations
+
+    yield emit(
+        q=("done", q_detail), r=("done", r_detail_full),
+        qa=("done", qa_detail), an=("done", an_detail),
+        sy=("done", sy_detail), banner=banner,
+    )
+    yield emit(
+        q=("done", q_detail), r=("done", r_detail_full),
+        qa=("done", qa_detail), an=("done", an_detail),
+        sy=("done", sy_detail), banner=banner,
+    )
 
 
-# ── UI ────────────────────────────────────────────────────────────────────────
+# ── Gradio UI ─────────────────────────────────────────────────────────────────
 
 _EMPTY_LOG = """
 <div class="empty-state">
-  <div class="icon">🔬</div>
-  <p>Agent reasoning will stream here step by step</p>
-</div>
-"""
+  <div class="icon">🤖</div>
+  <p>Multi-agent pipeline will stream here</p>
+</div>"""
 
 _EMPTY_SYNTH = """
 <div class="empty-state">
   <div class="icon">📋</div>
   <p>Evidence synthesis will appear here</p>
-</div>
-"""
+</div>"""
 
 with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
 
     gr.HTML("""
     <div class="app-header">
       <h1>Clinical Literature Scout</h1>
-      <p>Multi-step AI agent &nbsp;·&nbsp; σ-RAG + PubMed + Claude</p>
+      <p>Multi-agent AI system &nbsp;·&nbsp; Query · Retrieval · Quality · Analysis · Synthesis</p>
     </div>
     """)
 
     with gr.Group(elem_classes="input-card"):
         with gr.Row():
             mode_radio = gr.Radio(
-                choices=["scout", "debunker"],
-                value="scout",
-                label="Mode",
+                choices=["scout", "debunker"], value="scout", label="Mode",
                 info="Scout = clinical evidence  ·  Debunker = myth verification",
-                scale=1,
-                elem_classes="mode-radio",
+                scale=1, elem_classes="mode-radio",
             )
             question_box = gr.Textbox(
                 label="Your question or myth",
                 placeholder="E.g. What is the evidence for GLP-1 receptor agonists in reducing cardiovascular risk?",
-                lines=2,
-                scale=4,
-                elem_classes="question-box",
+                lines=2, scale=4, elem_classes="question-box",
             )
 
     run_btn = gr.Button("Run Agent →", variant="primary", size="lg", elem_classes="run-btn")
 
     with gr.Row(equal_height=True):
         with gr.Column(scale=3):
-            gr.HTML('<div class="panel-label">🤖 &nbsp;Agent Reasoning</div>')
+            gr.HTML('<div class="panel-label">🤖 &nbsp;Agent Orchestration</div>')
             log_out = gr.HTML(value=_EMPTY_LOG, elem_classes="log-panel hide-label")
         with gr.Column(scale=2):
             gr.HTML('<div class="panel-label">📋 &nbsp;Evidence Synthesis</div>')
-            synthesis_out = gr.Markdown(
-                value=_EMPTY_SYNTH,
-                elem_classes="synth-panel hide-label",
-            )
+            synthesis_out = gr.Markdown(value=_EMPTY_SYNTH, elem_classes="synth-panel hide-label")
 
     with gr.Accordion("📚 Citations", open=False, elem_classes="citations-accordion"):
         citations_out = gr.Markdown(value="*Citations will appear after synthesis.*")
 
-    gr.HTML('<div class="panel-label" style="margin-top:24px">💡 &nbsp;Try an example</div>')
+    gr.HTML('<div class="panel-label" style="margin-top:20px">💡 &nbsp;Try an example</div>')
     with gr.Row():
         for ex_q, ex_m in _EXAMPLES:
-            short = ex_q[:60] + "…" if len(ex_q) > 60 else ex_q
+            short = ex_q[:58] + "…" if len(ex_q) > 58 else ex_q
             gr.Button(short, size="sm", elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
