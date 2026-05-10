@@ -50,74 +50,103 @@ body, .gradio-container {
 }
 .gradio-container { max-width: 1400px !important; margin: 0 auto !important; }
 
-.app-header { padding: 40px 0 28px; text-align: center; }
+.app-header { padding: 32px 0 22px; text-align: center; }
 .app-header h1 {
-    font-size: 2rem; font-weight: 700; margin: 0 0 8px;
-    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%);
+    font-size: 1.9rem; font-weight: 700; margin: 0 0 7px;
+    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 45%, #2dd4bf 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     letter-spacing: -0.5px;
 }
-.app-header p { color: #4b5563; font-size: 0.85rem; margin: 0; }
+.app-header p { color: #374151; font-size: 0.8rem; margin: 0; letter-spacing: 0.2px; }
 
+/* ── Input card ──────────────────────────────────────────────────────────── */
 .input-card {
     background: #111118; border: 1px solid #1e1e2e;
-    border-radius: 16px; padding: 16px 20px; margin-bottom: 10px;
+    border-radius: 16px; padding: 18px 20px 14px; margin-bottom: 12px;
 }
-/* Align the radio + question + button row vertically */
-.input-card > .gradio-row { align-items: flex-end !important; }
-.mode-radio label { color: #9ca3af !important; font-size: 0.75rem !important; }
-.mode-radio .wrap { gap: 5px !important; }
+/* Full-width textarea at the top */
+.question-box { margin-bottom: 10px !important; }
+.question-box > label { display: none !important; }   /* hide Gradio label */
+.question-box textarea {
+    background: #0a0a14 !important; border: 1px solid #1e1e30 !important;
+    border-radius: 10px !important; color: #e2e8f0 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
+    resize: none !important; padding: 14px 16px !important; line-height: 1.6 !important;
+}
+.question-box textarea::placeholder { color: #2d3555 !important; }
+.question-box textarea:focus {
+    border-color: #2dd4bf !important; box-shadow: 0 0 0 2px rgba(45,212,191,0.12) !important;
+    outline: none !important;
+}
+/* Bottom bar: mode pills left, run button right */
+.input-footer {
+    display: flex !important; align-items: center !important;
+    justify-content: space-between !important; gap: 12px !important;
+    margin-top: 2px !important;
+}
+/* Hide default Gradio row gap overrides inside input-footer */
+.input-footer > div { flex: 0 0 auto !important; }
+/* Mode radio — pills, no outer label */
+.mode-radio > label, .mode-radio .label-wrap { display: none !important; }
+.mode-radio .wrap { gap: 6px !important; flex-wrap: nowrap !important; }
 .mode-radio .wrap label {
-    background: #1a1a2e !important; border: 1px solid #2a2a3e !important;
-    border-radius: 7px !important; padding: 4px 12px !important;
-    color: #9ca3af !important; font-size: 0.79rem !important;
-    font-weight: 500 !important; cursor: pointer !important; transition: all 0.2s !important;
+    background: #0f0f1e !important; border: 1px solid #1e1e30 !important;
+    border-radius: 20px !important; padding: 5px 16px !important;
+    color: #4b5563 !important; font-size: 0.78rem !important; font-weight: 500 !important;
+    cursor: pointer !important; transition: all 0.18s !important; white-space: nowrap !important;
 }
 .mode-radio .wrap label:has(input:checked) {
-    background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
-    border-color: transparent !important; color: white !important;
+    background: rgba(45,212,191,0.12) !important;
+    border-color: #2dd4bf !important; color: #2dd4bf !important;
 }
-.question-box textarea {
-    background: #0d0d1a !important; border: 1px solid #2a2a3e !important;
-    border-radius: 10px !important; color: #e2e8f0 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.9rem !important; resize: none !important;
-}
-.question-box textarea:focus {
-    border-color: #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59,130,246,0.15) !important;
-}
-/* Compact inline run button */
+/* Run button */
 .run-btn button, .run-btn {
-    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
-    border: none !important; border-radius: 10px !important; color: white !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.85rem !important;
-    font-weight: 600 !important; letter-spacing: 0.3px !important; white-space: nowrap !important;
-    transition: all 0.18s !important; box-shadow: 0 3px 14px rgba(99,102,241,0.35) !important;
-    padding: 0 20px !important; height: 42px !important; min-width: 110px !important;
+    background: linear-gradient(135deg, #0d9488 0%, #2dd4bf 100%) !important;
+    border: none !important; border-radius: 10px !important; color: #001a18 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.86rem !important;
+    font-weight: 700 !important; letter-spacing: 0.4px !important; white-space: nowrap !important;
+    transition: all 0.18s !important; box-shadow: 0 3px 16px rgba(45,212,191,0.3) !important;
+    padding: 0 24px !important; height: 38px !important; min-width: 100px !important;
 }
 .run-btn button:hover, .run-btn:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 22px rgba(99,102,241,0.5) !important;
+    box-shadow: 0 6px 24px rgba(45,212,191,0.45) !important;
+    background: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%) !important;
 }
 
-/* Examples strip */
-.examples-strip {
-    display: flex; gap: 8px; flex-wrap: wrap;
-    padding: 10px 0 14px; margin-bottom: 4px;
-}
+/* ── Example chips ────────────────────────────────────────────────────────── */
+.examples-section { margin-bottom: 16px; }
 .examples-label {
-    color: #2d3748; font-size: 0.65rem; font-weight: 600;
-    letter-spacing: 1.2px; text-transform: uppercase;
-    margin-bottom: 6px;
+    color: #2dd4bf; font-size: 0.63rem; font-weight: 700;
+    letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
 }
+.examples-label::before {
+    content: ''; display: inline-block;
+    width: 14px; height: 1px; background: #0d9488;
+}
+.examples-label::after {
+    content: ''; flex: 1; height: 1px; background: #0d2020;
+}
+/* Force all example buttons to be equal width */
+.examples-row > div { flex: 1 1 0 !important; min-width: 0 !important; }
+.example-btn, .example-btn > div { width: 100% !important; }
 .example-btn button {
-    background: #0f0f1a !important; border: 1px solid #1e1e30 !important;
-    border-radius: 20px !important; color: #4b5563 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.73rem !important;
-    transition: all 0.18s !important; white-space: nowrap !important;
-    text-align: center !important; height: 30px !important; padding: 0 14px !important;
+    background: rgba(13, 148, 136, 0.07) !important;
+    border: 1px solid rgba(45, 212, 191, 0.18) !important;
+    border-radius: 8px !important; color: #5eead4 !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.72rem !important;
+    font-weight: 400 !important; transition: all 0.18s !important;
+    white-space: normal !important; text-align: center !important;
+    height: auto !important; min-height: 52px !important;
+    padding: 8px 10px !important; line-height: 1.4 !important;
+    width: 100% !important;
 }
 .example-btn button:hover {
-    background: #13132a !important; border-color: #3b82f6 !important; color: #60a5fa !important;
+    background: rgba(13, 148, 136, 0.16) !important;
+    border-color: #2dd4bf !important; color: #a7f3d0 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(45,212,191,0.12) !important;
 }
 
 /* Panel wrappers — identical structure for both columns */
@@ -749,36 +778,35 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
     gr.HTML("""
     <div class="app-header">
       <h1>Clinical Literature Scout</h1>
-      <p>Multi-agent AI system &nbsp;·&nbsp; Query · Retrieval · Quality · Analysis · Synthesis · Guidelines</p>
+      <p>Multi-agent AI · PubMed retrieval · σ-RAG · Quality scoring · Guideline conflict detection</p>
     </div>
     """)
 
-    # ── Input card with inline run button ──────────────────────────────────────
+    # ── Input card: textarea on top, mode pills + Run button below ────────────
     with gr.Group(elem_classes="input-card"):
-        with gr.Row():
+        question_box = gr.Textbox(
+            label="",
+            placeholder=(
+                "Ask a clinical question or enter a medical myth to investigate…"
+            ),
+            lines=3, elem_classes="question-box",
+        )
+        with gr.Row(elem_classes="input-footer"):
             mode_radio = gr.Radio(
-                choices=["scout", "debunker"], value="scout", label="Mode",
-                info="Scout = clinical evidence  ·  Debunker = myth verification",
-                scale=1, elem_classes="mode-radio",
-            )
-            question_box = gr.Textbox(
-                label="Your question or myth",
-                placeholder=(
-                    "E.g. What is the evidence for GLP-1 receptor agonists"
-                    " in reducing cardiovascular risk?"
-                ),
-                lines=2, scale=5, elem_classes="question-box",
+                choices=["scout", "debunker"], value="scout",
+                label="", show_label=False, scale=4,
+                elem_classes="mode-radio",
             )
             run_btn = gr.Button(
-                "Run →", variant="primary", scale=1, elem_classes="run-btn",
+                "Run →", variant="primary", scale=1, min_width=110,
+                elem_classes="run-btn",
             )
 
-    # ── Example questions (chips, just below input) ────────────────────────────
-    gr.HTML('<div class="examples-label">💡 &nbsp;Try an example</div>')
-    with gr.Row(elem_classes="examples-strip"):
+    # ── Example chips ──────────────────────────────────────────────────────────
+    gr.HTML('<div class="examples-label">Try an example</div>')
+    with gr.Row(elem_classes="examples-row"):
         for ex_q, ex_m in _EXAMPLES:
-            label = ex_q[:52] + "…" if len(ex_q) > 52 else ex_q
-            gr.Button(label, size="sm", elem_classes="example-btn").click(
+            gr.Button(ex_q, size="sm", elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
             )
