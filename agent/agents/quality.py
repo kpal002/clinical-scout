@@ -8,11 +8,16 @@ from agent.state import Paper, StudyQuality
 
 # Evidence hierarchy (highest first so the first match wins)
 _LEVELS = [
-    (5, "Meta-analysis / Systematic Review",  r"meta.analy|systematic.review|cochrane"),
-    (4, "Randomized Controlled Trial",         r"randomi[sz]ed|randomis|RCT|\bclinical.trial\b|\bplacebo.controlled\b"),
-    (3, "Cohort / Prospective Study",          r"\bcohort\b|prospective|longitudinal|follow.up.stud"),
-    (2, "Case-Control / Retrospective",        r"case.control|retrospective|cross.sectional|population.based"),
-    (1, "Case Report / Opinion",               r"case.report|case.series|editorial|letter.to|commentary|opinion"),
+    (5, "Meta-analysis / Systematic Review",
+     r"meta.analy|systematic.review|cochrane"),
+    (4, "Randomized Controlled Trial",
+     r"randomi[sz]ed|randomis|RCT|\bclinical.trial\b|\bplacebo.controlled\b"),
+    (3, "Cohort / Prospective Study",
+     r"\bcohort\b|prospective|longitudinal|follow.up.stud"),
+    (2, "Case-Control / Retrospective",
+     r"case.control|retrospective|cross.sectional|population.based"),
+    (1, "Case Report / Opinion",
+     r"case.report|case.series|editorial|letter.to|commentary|opinion"),
 ]
 
 _CONFIDENCE = {5: "high", 4: "high", 3: "moderate", 2: "moderate", 1: "low"}

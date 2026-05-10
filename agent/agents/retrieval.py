@@ -13,10 +13,7 @@ _SIGMA_THRESHOLD = 1.2
 _SIGMA_RETRY = 0.7
 
 
-def _search_strategy(
-    queries: List[str],
-    question: str,
-) -> List[Paper]:
+def _search_strategy(queries: List[str]) -> List[Paper]:
     """Search PubMed for all queries in one strategy, fetch abstracts, return papers."""
     pmids: set[str] = set()
     for q in queries:
@@ -43,7 +40,7 @@ def run(
 
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = {
-            pool.submit(_search_strategy, queries, question): name
+            pool.submit(_search_strategy, queries): name
             for name, queries in strategies.items()
             if queries
         }

@@ -1,5 +1,5 @@
 [MASTER]
-ignored-modules=langgraph,anthropic,rich,requests,urllib3,numpy,sigma_rag,dotenv,sentence_transformers,fastapi,uvicorn
+ignored-modules=langgraph,anthropic,rich,requests,urllib3,numpy,sigma_rag,dotenv,sentence_transformers,fastapi,uvicorn,gradio
 
 [FORMAT]
 max-line-length=100

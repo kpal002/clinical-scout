@@ -30,6 +30,7 @@ def _client() -> anthropic.Anthropic:
 # ── Node: Query Agent ─────────────────────────────────────────────────────────
 
 def orchestrate_query(state: AgentState) -> AgentState:
+    """Query Agent: translate question into 3 specialised search strategies."""
     question = state["clinical_question"]
     mode = state.get("mode", "scout")
 
@@ -52,6 +53,7 @@ def orchestrate_query(state: AgentState) -> AgentState:
 # ── Node: Retrieval Agent ─────────────────────────────────────────────────────
 
 def orchestrate_retrieval(state: AgentState) -> AgentState:
+    """Retrieval Agent: run parallel PubMed searches and apply σ-RAG filter."""
     strategies = state["search_strategies"]
     question = state["clinical_question"]
 
@@ -112,6 +114,7 @@ def orchestrate_parallel(state: AgentState) -> AgentState:
 # ── Node: Synthesis Agent ─────────────────────────────────────────────────────
 
 def orchestrate_synthesis(state: AgentState) -> AgentState:
+    """Synthesis Agent: assemble claim-level citations from quality + analysis output."""
     papers = state["filtered_papers"]
     scores = state.get("quality_scores", [])
     all_findings = state.get("findings", [])
@@ -138,6 +141,7 @@ def orchestrate_synthesis(state: AgentState) -> AgentState:
 # ── Error handler ─────────────────────────────────────────────────────────────
 
 def error_handler(state: AgentState) -> AgentState:
+    """Clear output fields when the pipeline cannot produce results."""
     return {
         **state,
         "synthesis": None,

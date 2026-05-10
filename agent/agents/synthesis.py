@@ -1,11 +1,22 @@
 """Synthesis Agent — assembles claim-level citations using quality + analysis context."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import anthropic
 
 from agent.state import Contradiction, Finding, Paper, StudyQuality
+
+
+@dataclass
+class _SynthesisInput:
+    papers: List[Paper]
+    scores: List[StudyQuality]
+    findings: List[Finding]
+    contradictions: List[Contradiction]
+    question: str
+    mode: str
 
 _SCOUT_SYSTEM = """You are a clinical evidence synthesizer. Produce a structured report.
 
@@ -98,26 +109,20 @@ def _contradictions_context(contradictions: List[Contradiction]) -> str:
     )
 
 
-def _build_prompt(
-    papers: List[Paper],
-    scores: List[StudyQuality],
-    findings: List[Finding],
-    contradictions: List[Contradiction],
-    question: str,
-    mode: str,
-) -> str:
-    label = "Medical Myth" if mode == "debunker" else "Clinical Question"
+def _build_prompt(inp: _SynthesisInput) -> str:
+    label = "Medical Myth" if inp.mode == "debunker" else "Clinical Question"
     numbered = "\n\n".join(
         f"[{i + 1}] PMID:{p['pmid']} | {p['authors']} ({p['year']}) | {p['journal']}\n"
         f"Title: {p['title']}\n"
         f"Abstract: {p['abstract'][:1200]}"
-        for i, p in enumerate(papers)
+        for i, p in enumerate(inp.papers)
     )
     return (
-        f"{label}: {question}\n\n"
-        f"=== EVIDENCE QUALITY ===\n{_quality_context(papers, scores)}\n\n"
-        f"=== KEY FINDINGS PRE-EXTRACTED ===\n{_findings_context(findings)}\n\n"
-        f"=== CONTRADICTIONS DETECTED ===\n{_contradictions_context(contradictions)}\n\n"
+        f"{label}: {inp.question}\n\n"
+        f"=== EVIDENCE QUALITY ===\n{_quality_context(inp.papers, inp.scores)}\n\n"
+        f"=== KEY FINDINGS PRE-EXTRACTED ===\n{_findings_context(inp.findings)}\n\n"
+        f"=== CONTRADICTIONS DETECTED ===\n"
+        f"{_contradictions_context(inp.contradictions)}\n\n"
         f"=== PAPERS (cite by number) ===\n{numbered}"
     )
 
@@ -147,8 +152,12 @@ def run(
 
     Returns (synthesis_text, verdict_or_None, citation_list).
     """
+    inp = _SynthesisInput(
+        papers=papers, scores=scores, findings=findings,
+        contradictions=contradictions, question=question, mode=mode,
+    )
     system = _DEBUNKER_SYSTEM if mode == "debunker" else _SCOUT_SYSTEM
-    prompt = _build_prompt(papers, scores, findings, contradictions, question, mode)
+    prompt = _build_prompt(inp)
 
     resp = client.messages.create(
         model="claude-sonnet-4-5",

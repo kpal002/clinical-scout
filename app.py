@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Generator, List, Optional
+from typing import Generator, List, Tuple
 
 import anthropic
 import gradio as gr
@@ -23,9 +23,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from agent.agents import analysis, quality, query, retrieval, synthesis  # noqa: E402
-from agent.agents.quality import summary as quality_summary               # noqa: E402
-from agent.state import Contradiction, Finding, Paper, StudyQuality      # noqa: E402
+from agent.agents import analysis, quality, query, synthesis  # noqa: E402  # pylint: disable=wrong-import-position
+from agent.state import Contradiction, Finding, Paper, StudyQuality  # noqa: E402  # pylint: disable=wrong-import-position
+from retrieval import pubmed as _pubmed, sigma_filter as _sf  # noqa: E402  # pylint: disable=wrong-import-position
 
 _EXAMPLES = [
     ["What is the evidence for GLP-1 receptor agonists in reducing cardiovascular risk?", "scout"],
@@ -294,7 +294,7 @@ def _agent_card(
     )
 
 
-def _render(
+def _render(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     q_state: str, q_detail: str,
     r_state: str, r_detail: str,
     qa_state: str, qa_detail: str,
@@ -356,20 +356,127 @@ def _get_client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=key)
 
 
+def _run_retrieval(
+    strategies: dict, question: str
+) -> Tuple[List[Paper], List[Paper], str, str]:
+    """Parallel PubMed search + σ-RAG. Returns (raw, filtered, r_detail, sigma_table)."""
+
+    def _search_one(name: str, queries: list) -> Tuple[str, List[Paper]]:
+        pmids: set[str] = set()
+        for q_ in queries:
+            try:
+                pmids.update(_pubmed.search_pubmed(q_, max_results=20))
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+        papers_ = _pubmed.fetch_abstracts(list(pmids)) if pmids else []
+        return name, papers_
+
+    all_papers_map: dict[str, Paper] = {}
+    r_detail_parts: list[str] = []
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futs = {pool.submit(_search_one, n, qs): n for n, qs in strategies.items() if qs}
+        for fut in as_completed(futs):
+            name_, papers_ = fut.result()
+            for p in papers_:
+                all_papers_map.setdefault(p["pmid"], p)
+            label = name_.replace("_", " ")
+            r_detail_parts.append(
+                f'{_tag(label, "blue")} → {_tag(str(len(papers_)) + " papers", "gray")}'
+            )
+
+    raw = list(all_papers_map.values())
+    sigma_rows = ""
+
+    def _cb(title: str, score: float, passed: bool) -> None:
+        nonlocal sigma_rows
+        sigma_rows += _sigma_row(title, score, passed)
+
+    filtered = _sf.filter_papers(raw, question, sigma_threshold=1.2, max_results=12,
+                                  progress_callback=_cb)
+    if not filtered and raw:
+        sigma_rows = ""
+        filtered = _sf.filter_papers(raw, question, sigma_threshold=0.7, max_results=12,
+                                      progress_callback=_cb)
+
+    sigma_table = (
+        '<table class="sigma-table"><thead><tr>'
+        '<th>Paper</th><th>σ score</th><th></th>'
+        f'</tr></thead><tbody>{sigma_rows}</tbody></table>'
+    )
+    r_detail = "  ".join(r_detail_parts)
+    return raw, filtered, r_detail, sigma_table
+
+
+def _run_parallel_agents(
+    filtered: List[Paper], question: str, mode: str, client: anthropic.Anthropic
+) -> Tuple[List[StudyQuality], List[Finding], List[Contradiction]]:
+    """Run Quality and Analysis agents concurrently."""
+    quality_scores: List[StudyQuality] = []
+    findings: List[Finding] = []
+    contradictions: List[Contradiction] = []
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        q_fut = pool.submit(quality.run, filtered)
+        a_fut = pool.submit(analysis.run, filtered, question, mode, client)
+        for fut in as_completed([q_fut, a_fut]):
+            result = fut.result()
+            if fut is q_fut:
+                quality_scores = result
+            else:
+                findings, contradictions = result
+
+    return quality_scores, findings, contradictions
+
+
+def _qa_detail_html(quality_scores: List[StudyQuality]) -> str:
+    lvl_counts: dict[int, int] = {}
+    for s in quality_scores:
+        lvl_counts[s["level"]] = lvl_counts.get(s["level"], 0) + 1
+    lvl_labels = {
+        5: ("meta-analyses", "green"), 4: ("RCTs", "blue"),
+        3: ("cohort", "gray"), 2: ("case-ctrl", "gray"), 1: ("opinion", "gray"),
+    }
+    return "  ".join(
+        _tag(f'{cnt} {lvl_labels.get(lvl, ("other", "gray"))[0]}',
+             lvl_labels.get(lvl, ("other", "gray"))[1])
+        for lvl, cnt in sorted(lvl_counts.items(), reverse=True)
+    )
+
+
+def _an_detail_html(findings: List[Finding], contradictions: List[Contradiction]) -> str:
+    dir_icon = {"positive": "↑", "negative": "↓", "neutral": "→"}
+    dir_color = {"positive": "#34d399", "negative": "#ef4444", "neutral": "#6b7280"}
+    findings_html = "".join(
+        f'<div class="finding-row">'
+        f'<span class="finding-dir" style="color:{dir_color.get(f["direction"], "#6b7280")}">'
+        f'{dir_icon.get(f["direction"], "→")}</span>'
+        f'<span style="color:#6b7280">'
+        f'{f["claim"][:90]}{"…" if len(f["claim"]) > 90 else ""}</span>'
+        f'</div>'
+        for f in findings[:5]
+    )
+    contra_html = "".join(
+        f'<div class="contradiction-row">⚡ {c["topic"]}</div>'
+        for c in contradictions[:3]
+    )
+    return findings_html + (contra_html if contradictions else "")
+
+
 def stream_pipeline(
     question: str, mode: str
-) -> Generator[tuple[str, str, str], None, None]:
+) -> Generator[Tuple[str, str, str], None, None]:
     """Run the multi-agent pipeline and yield (log_html, synthesis_md, citations_md)."""
 
     synthesis_md = ""
     citations_md = ""
 
     # Initial state — all pending
-    def emit(
+    def emit(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         q=("pending", ""), r=("pending", ""),
         qa=("pending", ""), an=("pending", ""),
         sy=("pending", ""), banner=""
-    ) -> tuple[str, str, str]:
+    ) -> Tuple[str, str, str]:
         return (
             _render(q[0], q[1], r[0], r[1], qa[0], qa[1], an[0], an[1], sy[0], sy[1], banner),
             synthesis_md,
@@ -415,130 +522,32 @@ def stream_pipeline(
     # ── Retrieval Agent ────────────────────────────────────────────────────────
     yield emit(q=("done", q_detail), r=("active", ""))
 
-    # Run 3 strategy searches in parallel; stream per-strategy counts live
-    from retrieval import pubmed as _pubmed, sigma_filter as _sf  # noqa: E402
-
-    all_papers_map: dict[str, Paper] = {}
-    r_detail_parts: list[str] = []
-
-    def _search_one(name: str, queries: list[str]) -> tuple[str, list[Paper]]:
-        pmids: set[str] = set()
-        for q_ in queries:
-            try:
-                pmids.update(_pubmed.search_pubmed(q_, max_results=20))
-            except Exception:  # pylint: disable=broad-exception-caught
-                pass
-        papers_ = _pubmed.fetch_abstracts(list(pmids)) if pmids else []
-        return name, papers_
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futs = {
-            pool.submit(_search_one, name, qs): name
-            for name, qs in strategies.items() if qs
-        }
-        for fut in as_completed(futs):
-            name_, papers_ = fut.result()
-            for p in papers_:
-                all_papers_map.setdefault(p["pmid"], p)
-            label = name_.replace("_", " ")
-            r_detail_parts.append(
-                f'{_tag(label, "blue")} → {_tag(str(len(papers_)) + " papers", "gray")}'
-            )
-            yield emit(
-                q=("done", q_detail),
-                r=("active", "  ".join(r_detail_parts)),
-            )
-
-    raw_papers = list(all_papers_map.values())
-
-    # σ-RAG filter with live table
-    sigma_rows = ""
-
-    def _cb(title: str, score: float, passed: bool) -> None:
-        nonlocal sigma_rows
-        sigma_rows += _sigma_row(title, score, passed)
-
-    filtered = _sf.filter_papers(
-        raw_papers, question, sigma_threshold=1.2, max_results=12,
-        progress_callback=_cb,
-    )
-    if not filtered and raw_papers:
-        sigma_rows = ""
-        filtered = _sf.filter_papers(
-            raw_papers, question, sigma_threshold=0.7, max_results=12,
-            progress_callback=_cb,
-        )
-
-    sigma_table = (
-        '<table class="sigma-table"><thead><tr>'
-        '<th>Paper</th><th>σ score</th><th></th>'
-        f'</tr></thead><tbody>{sigma_rows}</tbody></table>'
-    )
+    raw_papers, filtered, r_detail_base, sigma_table = _run_retrieval(strategies, question)
     r_detail_full = (
-        "  ".join(r_detail_parts)
+        r_detail_base
         + f'<br>{_tag(str(len(raw_papers)) + " raw", "gray")} → '
         + f'{_tag(str(len(filtered)) + " passed σ-RAG", "green")}'
         + sigma_table
     )
-    r_ok = bool(filtered)
-    r_final_state = "done" if r_ok else "error"
-    yield emit(
-        q=("done", q_detail),
-        r=(r_final_state, r_detail_full),
-    )
+    r_final_state = "done" if filtered else "error"
+    yield emit(q=("done", q_detail), r=(r_final_state, r_detail_full))
 
     if not filtered:
-        yield emit(
-            q=("done", q_detail),
-            r=("error", r_detail_full + '<br><span style="color:#f59e0b;font-size:0.72rem">⚠ No papers cleared threshold.</span>'),
+        no_pass_detail = (
+            r_detail_full
+            + '<br><span style="color:#f59e0b;font-size:0.72rem">⚠ No papers cleared threshold.</span>'
         )
+        yield emit(q=("done", q_detail), r=("error", no_pass_detail))
         return
 
     # ── Quality Agent ∥ Analysis Agent ────────────────────────────────────────
-    yield emit(
-        q=("done", q_detail), r=("done", r_detail_full),
-        qa=("active", ""), an=("active", ""),
-    )
+    yield emit(q=("done", q_detail), r=("done", r_detail_full), qa=("active", ""), an=("active", ""))
 
-    quality_scores: List[StudyQuality] = []
-    findings: List[Finding] = []
-    contradictions: List[Contradiction] = []
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        q_fut = pool.submit(quality.run, filtered)
-        a_fut = pool.submit(analysis.run, filtered, question, mode, client)
-        for fut in as_completed([q_fut, a_fut]):
-            result = fut.result()
-            if fut is q_fut:
-                quality_scores = result
-            else:
-                findings, contradictions = result
-
-    # Quality detail
-    lvl_counts: dict[int, int] = {}
-    for s in quality_scores:
-        lvl_counts[s["level"]] = lvl_counts.get(s["level"], 0) + 1
-    lvl_labels = {5: ("meta-analyses", "green"), 4: ("RCTs", "blue"), 3: ("cohort", "gray"), 2: ("case-ctrl", "gray"), 1: ("opinion", "gray")}
-    qa_detail = "  ".join(
-        f'{_tag(str(cnt) + " " + lvl_labels.get(lvl, ("other", "gray"))[0], lvl_labels.get(lvl, ("other", "gray"))[1])}'
-        for lvl, cnt in sorted(lvl_counts.items(), reverse=True)
+    quality_scores, findings, contradictions = _run_parallel_agents(
+        filtered, question, mode, client
     )
-
-    # Analysis detail
-    dir_icon = {"positive": "↑", "negative": "↓", "neutral": "→"}
-    findings_html = "".join(
-        f'<div class="finding-row">'
-        f'  <span class="finding-dir" style="color:{"#34d399" if f["direction"]=="positive" else "#ef4444" if f["direction"]=="negative" else "#6b7280"}">'
-        f'  {dir_icon.get(f["direction"], "→")}</span>'
-        f'  <span style="color:#6b7280">{f["claim"][:90]}{"…" if len(f["claim"])>90 else ""}</span>'
-        f'</div>'
-        for f in findings[:5]
-    )
-    contra_html = "".join(
-        f'<div class="contradiction-row">⚡ {c["topic"]}</div>'
-        for c in contradictions[:3]
-    )
-    an_detail = findings_html + (contra_html if contradictions else "")
+    qa_detail = _qa_detail_html(quality_scores)
+    an_detail = _an_detail_html(findings, contradictions)
 
     yield emit(
         q=("done", q_detail), r=("done", r_detail_full),
@@ -548,7 +557,7 @@ def stream_pipeline(
 
     # ── Synthesis Agent ────────────────────────────────────────────────────────
     try:
-        synth, verdict, cites = synthesis.run(
+        synth, verdict, _ = synthesis.run(
             filtered, quality_scores, findings, contradictions, question, mode, client
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -649,8 +658,8 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
     gr.HTML('<div class="panel-label" style="margin-top:20px">💡 &nbsp;Try an example</div>')
     with gr.Row():
         for ex_q, ex_m in _EXAMPLES:
-            short = ex_q[:58] + "…" if len(ex_q) > 58 else ex_q
-            gr.Button(short, size="sm", elem_classes="example-btn").click(
+            btn_label = ex_q[:58] + "…" if len(ex_q) > 58 else ex_q
+            gr.Button(btn_label, size="sm", elem_classes="example-btn").click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
             )

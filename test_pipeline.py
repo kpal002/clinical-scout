@@ -102,7 +102,9 @@ def _mock_create(**kwargs) -> MagicMock:
             mock.content[0].text = _STRATEGIES_GLP1
 
     # Analysis Agent call → JSON findings + contradictions
-    elif '"findings"' in system or "findings" in system.lower() and "contradictions" in system.lower():
+    elif '"findings"' in system or (
+        "findings" in system.lower() and "contradictions" in system.lower()
+    ):
         if "knuckle" in user_content or "arthritis" in user_content:
             mock.content[0].text = _ANALYSIS_KNUCKLE
         else:
@@ -120,6 +122,7 @@ def _mock_create(**kwargs) -> MagicMock:
 # ── Test runner ───────────────────────────────────────────────────────────────
 
 def _run_test(question: str, mode: str) -> None:
+    """Run one full pipeline test and assert basic invariants."""
     from agent.tools import reset_client_cache  # pylint: disable=import-outside-toplevel
     from agent.graph import run_agent            # pylint: disable=import-outside-toplevel
     reset_client_cache()
@@ -127,7 +130,8 @@ def _run_test(question: str, mode: str) -> None:
     console.print(f"\n[bold]Mode:[/bold] {mode} | [bold]Question:[/bold] {question}")
     state = run_agent(question, mode=mode)
 
-    console.print(f"  [green]✓[/green] Strategies: {list(state.get('search_strategies', {}).keys())}")
+    strat_keys = list(state.get('search_strategies', {}).keys())
+    console.print(f"  [green]✓[/green] Strategies: {strat_keys}")
     console.print(f"  [green]✓[/green] Queries: {len(state.get('search_queries', []))}")
     console.print(f"  [green]✓[/green] Raw papers: {len(state['raw_papers'])}")
     console.print(f"  [green]✓[/green] After σ-RAG: {len(state['filtered_papers'])}")
