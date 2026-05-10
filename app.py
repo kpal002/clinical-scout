@@ -295,7 +295,7 @@ def _agent_card(
     )
 
 
-def _render(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def _render(  # pylint: disable=too-many-arguments
     q_state: str, q_detail: str,
     r_state: str, r_detail: str,
     qa_state: str, qa_detail: str,
@@ -517,7 +517,7 @@ def stream_pipeline(  # pylint: disable=too-many-locals
     citations_md = ""
 
     # Initial state — all pending
-    def emit(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def emit(  # pylint: disable=too-many-arguments
         q=("pending", ""), r=("pending", ""),
         qa=("pending", ""), an=("pending", ""),
         sy=("pending", ""), banner=""
@@ -685,8 +685,10 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
     gr.HTML('<div class="panel-label" style="margin-top:20px">💡 &nbsp;Try an example</div>')
     with gr.Row():
         for ex_q, ex_m in _EXAMPLES:
-            btn_label = ex_q[:58] + "…" if len(ex_q) > 58 else ex_q
-            gr.Button(btn_label, size="sm", elem_classes="example-btn").click(
+            gr.Button(
+                ex_q[:58] + "…" if len(ex_q) > 58 else ex_q,
+                size="sm", elem_classes="example-btn",
+            ).click(
                 fn=lambda q=ex_q, m=ex_m: (q, m),
                 outputs=[question_box, mode_radio],
             )
