@@ -11,6 +11,7 @@ from agent.state import Contradiction, Finding, Paper, StudyQuality
 
 @dataclass
 class SynthesisInput:
+    """Bundles all inputs to the Synthesis Agent to keep run() to 2 arguments."""
     papers: List[Paper]
     scores: List[StudyQuality]
     findings: List[Finding]

@@ -418,6 +418,18 @@ def _run_retrieval(
     return raw, filtered, "  ".join(r_detail_parts), sigma_table
 
 
+def _q_detail_html(strategies: dict) -> str:
+    """Build the Query Agent detail block from strategy names and queries."""
+    flat = [q_ for qs in strategies.values() for q_ in qs]
+    tags = " ".join(_tag(n.replace("_", " "), "blue") for n in strategies)
+    query_spans = "  ".join(
+        f'<span class="mono" style="color:#4b5563">{q_[:55]}…</span>'
+        if len(q_) > 55 else f'<span class="mono" style="color:#4b5563">{q_}</span>'
+        for q_ in flat[:6]
+    )
+    return f'{tags}<br>{query_spans}'
+
+
 def _verdict_badge(mode: str, verdict: str) -> str:
     """Return an HTML badge for the debunker verdict, or empty string."""
     if mode != "debunker" or not verdict:
@@ -537,19 +549,7 @@ def stream_pipeline(
         yield emit(q=("error", f"❌ {exc}"))
         return
 
-    flat_queries = [q_ for qs in strategies.values() for q_ in qs]
-    strategy_tags = " ".join(
-        _tag(name.replace("_", " "), "blue")
-        for name in strategies
-    )
-    q_detail = (
-        f'{strategy_tags}<br>'
-        + "  ".join(
-            f'<span class="mono" style="color:#4b5563">{q_[:55]}…</span>'
-            if len(q_) > 55 else f'<span class="mono" style="color:#4b5563">{q_}</span>'
-            for q_ in flat_queries[:6]
-        )
-    )
+    q_detail = _q_detail_html(strategies)
     yield emit(q=("done", q_detail))
 
     # ── Retrieval Agent ────────────────────────────────────────────────────────
