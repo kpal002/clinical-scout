@@ -36,228 +36,307 @@ _EXAMPLES = [
     ["Does vitamin C prevent the common cold?", "debunker"],
 ]
 
-_VERDICT_COLOR = {"BUSTED": "#22c55e", "SUPPORTED": "#ef4444", "MIXED": "#f59e0b"}
+_VERDICT_COLOR = {"BUSTED": "#00ffaa", "SUPPORTED": "#ff4444", "MIXED": "#ffaa00"}
 _VERDICT_LABEL = {"BUSTED": "BUSTED ✓", "SUPPORTED": "SUPPORTED", "MIXED": "MIXED EVIDENCE"}
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 
 _CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
 * { box-sizing: border-box; }
+
 body, .gradio-container {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
-    background: #0a0a0f !important;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace !important;
+    background: #0a0a0a !important;
+    color: #cccccc !important;
 }
+
 .gradio-container { max-width: 1400px !important; margin: 0 auto !important; }
 
-.app-header { padding: 32px 0 22px; text-align: center; }
-.app-header h1 {
-    font-size: 1.9rem; font-weight: 700; margin: 0 0 7px;
-    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 45%, #2dd4bf 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    letter-spacing: -0.5px;
+/* ── Header ── */
+.app-header {
+    padding: 28px 0 18px;
+    text-align: left;
+    border-bottom: 1px solid #1a1a1a;
+    margin-bottom: 20px;
 }
-.app-header p { color: #374151; font-size: 0.8rem; margin: 0; letter-spacing: 0.2px; }
+.app-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #00ffaa;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+    font-family: 'JetBrains Mono', monospace;
+}
+.app-title::before { content: '> '; color: #444; }
+.app-subtitle {
+    font-size: 0.72rem;
+    color: #444;
+    letter-spacing: 1px;
+    margin: 0;
+    font-family: 'JetBrains Mono', monospace;
+}
 
-/* ── Input card ──────────────────────────────────────────────────────────── */
+/* ── Input card ── */
 .input-card {
-    background: #111118; border: 1px solid #1e1e2e;
-    border-radius: 16px; padding: 18px 20px; margin-bottom: 14px;
-}
-.mode-radio .wrap { gap: 6px !important; flex-wrap: nowrap !important; }
-.mode-radio .wrap label {
-    border-radius: 20px !important; padding: 5px 16px !important;
-    font-size: 0.79rem !important; font-weight: 500 !important;
-    cursor: pointer !important; transition: all 0.18s !important;
+    background: #0f0f0f !important;
+    border: 1px solid #1e1e1e !important;
+    border-radius: 2px !important;
+    padding: 16px 18px !important;
+    margin-bottom: 12px !important;
 }
 
-/* ── Example chips ────────────────────────────────────────────────────────── */
-.examples-label {
-    font-size: 0.62rem; font-weight: 700; letter-spacing: 1.5px;
-    text-transform: uppercase; margin-bottom: 8px;
-}
-.examples-row > div { flex: 1 1 0% !important; min-width: 0 !important; }
-.example-btn { width: 100% !important; }
-
-/* Panel wrappers — identical structure for both columns */
+/* ── Panel wrappers ── */
 .panel-wrap {
-    background: #0d0d18; border: 1px solid #1a1a2a;
-    border-radius: 16px; padding: 20px; min-height: 560px;
-    display: flex; flex-direction: column;
+    background: #0f0f0f;
+    border: 1px solid #1e1e1e;
+    border-radius: 2px;
+    padding: 18px;
+    min-height: 560px;
+    display: flex;
+    flex-direction: column;
 }
 .panel-hdr {
-    color: #2d3748; font-size: 0.64rem; font-weight: 600;
-    letter-spacing: 1.5px; text-transform: uppercase;
-    margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid #16161f;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #00ffaa;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1a1a1a;
     flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
 }
-/* Log panel is a gr.HTML — we control all its content via Python */
-.log-panel { padding: 0 !important; border: none !important; background: none !important; }
-/* Synthesis panel is gr.Markdown — wrap to match */
-.synth-outer {
-    background: #0d0d18; border: 1px solid #1a1a2a;
-    border-radius: 16px; overflow: hidden; min-height: 560px;
-}
-.synth-inner {
-    padding: 20px;
-}
-.synth-inner h2, .synth-inner h3 { color: #e2e8f0 !important; font-weight: 600 !important; }
-.synth-inner p, .synth-inner li { color: #94a3b8 !important; line-height: 1.7 !important; }
-/* Hide default Gradio component labels */
-.hide-label > label, .hide-label label.svelte-1b6s6g { display: none !important; }
-.synth-panel > label, .log-raw > label { display: none !important; }
-.citations-accordion {
-    background: #0d0d18 !important; border: 1px solid #1a1a2a !important;
-    border-radius: 12px !important; margin-top: 10px;
-}
-footer { display: none !important; }
 
-/* ── Agent tree styles ─────────────────────────────────────────────────── */
+/* ── Synthesis panel ── */
+.synth-outer {
+    background: #0f0f0f !important;
+    border: 1px solid #1e1e1e !important;
+    border-radius: 2px !important;
+    overflow: hidden !important;
+    min-height: 560px !important;
+}
+.synth-inner { padding: 18px !important; }
+.synth-inner h2 {
+    color: #00ffaa !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 2px !important;
+    text-transform: uppercase !important;
+    border-left: 2px solid #00ffaa !important;
+    padding-left: 10px !important;
+    margin: 18px 0 10px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
+.synth-inner h3 {
+    color: #888 !important;
+    font-size: 0.68rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 1.5px !important;
+    text-transform: uppercase !important;
+    margin: 12px 0 6px !important;
+}
+.synth-inner p, .synth-inner li {
+    color: #aaaaaa !important;
+    line-height: 1.75 !important;
+    font-size: 0.82rem !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
+.synth-inner strong { color: #cccccc !important; }
+.synth-inner code {
+    background: #1a1a1a !important;
+    border: 1px solid #2a2a2a !important;
+    color: #00ffaa !important;
+    padding: 1px 5px !important;
+    border-radius: 2px !important;
+}
+
+.synthesis-header {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #00ffaa;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1a1a1a;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Agent tree ── */
 .agent-tree { display: flex; flex-direction: column; gap: 0; }
 
 .orchestrator-header {
     display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; margin-bottom: 12px;
-    background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(168,85,247,0.05));
-    border: 1px solid rgba(99,102,241,0.2); border-radius: 10px;
-    font-size: 0.82rem; font-weight: 600; color: #a78bfa;
+    padding: 8px 12px; margin-bottom: 10px;
+    background: #111;
+    border: 1px solid #00ffaa33;
+    border-radius: 2px;
+    font-size: 0.72rem; font-weight: 600; color: #00ffaa;
+    letter-spacing: 1px;
+    font-family: 'JetBrains Mono', monospace;
 }
 .orch-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #6366f1; box-shadow: 0 0 8px #6366f1;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #00ffaa; box-shadow: 0 0 8px #00ffaa88;
     animation: orch-pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
 }
-@keyframes orch-pulse {
-    0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
-}
+@keyframes orch-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .agent-row { display: flex; gap: 0; position: relative; padding-left: 20px; }
 .agent-row::before {
     content: '';
     position: absolute; left: 8px; top: 0; bottom: 0;
-    width: 1px; background: #1e1e2e;
+    width: 1px; background: #222;
 }
 .agent-row:last-child::before { bottom: 50%; }
 
 .branch-line {
     position: absolute; left: 8px; top: 50%; width: 12px; height: 1px;
-    background: #2a2a3e;
+    background: #2a2a2a;
 }
 
 .agent-card {
-    flex: 1; margin: 4px 0 4px 12px;
-    background: #111118; border: 1px solid #1e1e2e;
-    border-radius: 10px; padding: 10px 14px;
-    transition: border-color 0.3s;
+    flex: 1; margin: 3px 0 3px 12px;
+    background: #111; border: 1px solid #1e1e1e;
+    border-radius: 2px; padding: 9px 12px;
+    transition: border-color 0.2s;
 }
-.agent-card.active { border-color: #3b82f6; box-shadow: 0 0 12px rgba(59,130,246,0.12); }
-.agent-card.done   { border-color: #1a3a2a; }
-.agent-card.error  { border-color: #7f1d1d; }
+.agent-card.active { border-color: #00ffaa55; box-shadow: 0 0 10px rgba(0,255,170,0.08); }
+.agent-card.done   { border-color: #00aa5533; }
+.agent-card.error  { border-color: #aa220033; }
 
 .agent-card-header {
     display: flex; align-items: center; gap: 8px;
-    font-size: 0.8rem; font-weight: 600; margin-bottom: 6px;
+    font-size: 0.72rem; font-weight: 600; margin-bottom: 5px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px;
 }
-.agent-card-header.pending { color: #374151; }
-.agent-card-header.active  { color: #60a5fa; }
-.agent-card-header.done    { color: #34d399; }
-.agent-card-header.error   { color: #ef4444; }
+.agent-card-header.pending { color: #333; }
+.agent-card-header.active  { color: #00ffaa; }
+.agent-card-header.done    { color: #00cc88; }
+.agent-card-header.error   { color: #ff4444; }
 
 .status-dot {
-    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }
-.status-dot.pending { background: #1f2937; border: 1px solid #374151; }
-.status-dot.active  { background: #3b82f6; box-shadow: 0 0 6px #3b82f6; animation: blink 1s ease-in-out infinite; }
-.status-dot.done    { background: #22c55e; }
-.status-dot.error   { background: #ef4444; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.status-dot.pending { background: #222; border: 1px solid #333; }
+.status-dot.active  { background: #00ffaa; box-shadow: 0 0 6px #00ffaa88; animation: blink 1s ease-in-out infinite; }
+.status-dot.done    { background: #00cc88; }
+.status-dot.error   { background: #ff4444; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
 .thinking {
     display: inline-flex; gap: 3px; align-items: center; margin-left: 4px;
 }
 .thinking span {
-    width: 3px; height: 3px; border-radius: 50%; background: #6366f1;
+    width: 3px; height: 3px; border-radius: 50%; background: #00ffaa;
     animation: bounce 1.1s ease-in-out infinite;
 }
 .thinking span:nth-child(2) { animation-delay: 0.18s; }
 .thinking span:nth-child(3) { animation-delay: 0.36s; }
-@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-4px);opacity:1} }
+@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:.3} 40%{transform:translateY(-4px);opacity:1} }
 
-.agent-detail {
-    font-size: 0.74rem; color: #4b5563; line-height: 1.6;
-    padding-left: 15px;
-}
-.agent-detail.visible { color: #6b7280; }
+.agent-detail { font-size: 0.68rem; color: #444; line-height: 1.6; padding-left: 14px; font-family: 'JetBrains Mono', monospace; }
+.agent-detail.visible { color: #666; }
 
 /* parallel bracket */
 .parallel-group {
-    margin: 4px 0 4px 12px; padding-left: 12px;
-    border-left: 2px solid #1e3a5f;
-    display: flex; flex-direction: column; gap: 4px;
+    margin: 3px 0 3px 12px; padding-left: 12px;
+    border-left: 1px solid #00ffaa22;
+    display: flex; flex-direction: column; gap: 3px;
     position: relative;
 }
 .parallel-label {
-    font-size: 0.65rem; font-weight: 600; color: #1e3a5f;
-    letter-spacing: 1px; text-transform: uppercase;
-    margin-bottom: 2px;
+    font-size: 0.58rem; font-weight: 600; color: #00ffaa44;
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 /* inline tags */
 .tag {
     display: inline-block; padding: 1px 7px;
-    border-radius: 4px; font-size: 0.68rem; font-weight: 500;
-    font-family: 'JetBrains Mono', monospace;
+    border-radius: 2px; font-size: 0.65rem; font-weight: 500;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px;
 }
-.tag-blue  { background: #0f172a; border: 1px solid #1e3a5f; color: #7dd3fc; }
-.tag-green { background: #052e16; border: 1px solid #14532d; color: #4ade80; }
-.tag-amber { background: #1c1003; border: 1px solid #713f12; color: #fbbf24; }
-.tag-gray  { background: #111118; border: 1px solid #2a2a3e; color: #6b7280; }
+.tag-blue  { background: #001a2a; border: 1px solid #003355; color: #44aadd; }
+.tag-green { background: #001a0f; border: 1px solid #003322; color: #00ffaa; }
+.tag-amber { background: #1a1200; border: 1px solid #332200; color: #ffaa00; }
+.tag-gray  { background: #111; border: 1px solid #222; color: #555; }
 
 .sigma-table {
-    width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.72rem;
-}
-.sigma-table th {
-    color: #374151; font-weight: 500; text-align: left; padding: 3px 7px;
-    border-bottom: 1px solid #1e1e2e; font-size: 0.65rem;
-    letter-spacing: 0.5px; text-transform: uppercase;
-}
-.sigma-table td { padding: 4px 7px; color: #6b7280; border-bottom: 1px solid #0d0d18; }
-.sigma-table td.pass { color: #34d399; }
-.sigma-table td.fail { color: #374151; }
-.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
-
-.finding-row { display: flex; gap: 6px; align-items: flex-start; margin: 3px 0; font-size: 0.75rem; }
-.finding-dir { flex-shrink: 0; font-size: 0.7rem; }
-.contradiction-row {
-    background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.15);
-    border-radius: 6px; padding: 5px 8px; margin: 3px 0; font-size: 0.73rem; color: #92400e;
-}
-
-.guideline-row {
-    display: flex; gap: 8px; align-items: flex-start; margin: 3px 0; font-size: 0.75rem;
-}
-.guideline-org {
-    flex-shrink: 0; font-weight: 600; font-size: 0.7rem;
+    width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.67rem;
     font-family: 'JetBrains Mono', monospace;
 }
-.conflict-supports { color: #34d399; }
-.conflict-minor    { color: #fbbf24; }
-.conflict-moderate { color: #f97316; }
-.conflict-major    { color: #ef4444; }
+.sigma-table th {
+    color: #333; font-weight: 500; text-align: left; padding: 3px 7px;
+    border-bottom: 1px solid #1e1e1e; font-size: 0.6rem;
+    letter-spacing: 1px; text-transform: uppercase;
+}
+.sigma-table td { padding: 3px 7px; color: #444; border-bottom: 1px solid #0f0f0f; }
+.sigma-table td.pass { color: #00cc88; }
+.sigma-table td.fail { color: #2a2a2a; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; }
+
+.finding-row { display: flex; gap: 6px; align-items: flex-start; margin: 3px 0; font-size: 0.7rem; }
+.finding-dir { flex-shrink: 0; font-size: 0.7rem; }
+.contradiction-row {
+    background: rgba(255,170,0,0.04); border: 1px solid rgba(255,170,0,0.12);
+    border-radius: 2px; padding: 4px 8px; margin: 3px 0; font-size: 0.68rem; color: #664400;
+}
+
+.guideline-row { display: flex; gap: 8px; align-items: flex-start; margin: 3px 0; font-size: 0.7rem; }
+.guideline-org {
+    flex-shrink: 0; font-weight: 600; font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+.conflict-supports { color: #00cc88; }
+.conflict-minor    { color: #ffaa00; }
+.conflict-moderate { color: #ff6600; }
+.conflict-major    { color: #ff4444; }
 
 .complete-banner {
-    background: linear-gradient(135deg,rgba(5,150,105,.08),rgba(52,211,153,.04));
-    border: 1px solid rgba(52,211,153,.18); border-radius: 8px;
-    padding: 10px 14px; margin-top: 14px;
-    color: #34d399; font-size: 0.78rem; font-weight: 500;
+    background: rgba(0,255,170,0.04);
+    border: 1px solid rgba(0,255,170,0.15);
+    border-radius: 2px;
+    padding: 9px 12px; margin-top: 12px;
+    color: #00cc88; font-size: 0.7rem; font-weight: 500;
     display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px;
 }
+.complete-banner::before { content: '✓ '; }
+
 .empty-state {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; height: 300px; color: #1f2937; gap: 10px; text-align: center;
+    justify-content: center; height: 300px; color: #222; gap: 10px; text-align: center;
 }
-.empty-state .icon { font-size: 2rem; opacity: .25; }
-.empty-state p { font-size: 0.8rem; margin: 0; }
+.empty-state .icon { font-size: 1.8rem; opacity: .15; }
+.empty-state p { font-size: 0.72rem; margin: 0; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
+
+/* ── Misc ── */
+.hide-label > label, .hide-label label.svelte-1b6s6g { display: none !important; }
+.synth-panel > label, .log-raw > label { display: none !important; }
+.citations-accordion {
+    background: #0f0f0f !important; border: 1px solid #1e1e1e !important;
+    border-radius: 2px !important; margin-top: 10px !important;
+}
+footer { display: none !important; }
+
+/* ── Mode radio ── */
+.mode-radio .wrap { gap: 6px !important; flex-wrap: nowrap !important; }
+.mode-radio .wrap label {
+    border-radius: 2px !important; padding: 5px 16px !important;
+    font-size: 0.72rem !important; font-weight: 500 !important;
+    cursor: pointer !important; transition: all 0.15s !important;
+    font-family: 'JetBrains Mono', monospace !important; letter-spacing: 0.5px !important;
+}
+
+/* ── Example chips layout ── */
+.examples-row > div { flex: 1 1 0% !important; min-width: 0 !important; }
+.example-btn { width: 100% !important; }
 """
 
 # ── HTML rendering helpers ────────────────────────────────────────────────────
@@ -308,7 +387,7 @@ def _render(  # pylint: disable=too-many-arguments,R0917
         f'<div class="agent-row">'
         f'  <div class="branch-line"></div>'
         f'  <div class="parallel-group">'
-        f'    <div class="parallel-label">⚡ parallel</div>'
+        f'    <div class="parallel-label">// parallel</div>'
         f'    {_agent_card("📊", "Quality Agent", qa_state, qa_detail, qa_state == "active")}'
         f'    {_agent_card("🔬", "Analysis Agent", an_state, an_detail, an_state == "active")}'
         f'    {_agent_card("📋", "Guidelines Agent", gl_state, gl_detail, gl_state == "active")}'
@@ -317,10 +396,10 @@ def _render(  # pylint: disable=too-many-arguments,R0917
     )
     return (
         '<div class="panel-wrap">'
-        '  <div class="panel-hdr">🤖 &nbsp;Agent Orchestration</div>'
+        '  <div class="panel-hdr">agent orchestration</div>'
         '  <div class="agent-tree">'
         '    <div class="orchestrator-header">'
-        '      <div class="orch-dot"></div> Orchestrator Agent'
+        '      <div class="orch-dot"></div> ORCHESTRATOR'
         '    </div>'
         f'  <div class="agent-row"><div class="branch-line"></div>'
         f'    {_agent_card("📝", "Query Agent", q_state, q_detail, q_state == "active")}'
@@ -431,8 +510,8 @@ def _q_detail_html(strategies: dict) -> str:
     flat = [q_ for qs in strategies.values() for q_ in qs]
     tags = " ".join(_tag(n.replace("_", " "), "blue") for n in strategies)
     query_spans = "  ".join(
-        f'<span class="mono" style="color:#4b5563">{q_[:55]}…</span>'
-        if len(q_) > 55 else f'<span class="mono" style="color:#4b5563">{q_}</span>'
+        f'<span class="mono" style="color:#333">{q_[:55]}…</span>'
+        if len(q_) > 55 else f'<span class="mono" style="color:#333">{q_}</span>'
         for q_ in flat[:6]
     )
     return f'{tags}<br>{query_spans}'
@@ -442,12 +521,13 @@ def _verdict_badge(mode: str, verdict: str) -> str:
     """Return an HTML badge for the debunker verdict, or empty string."""
     if mode != "debunker" or not verdict:
         return ""
-    color = _VERDICT_COLOR.get(verdict, "#6b7280")
+    color = _VERDICT_COLOR.get(verdict, "#555")
     label = _VERDICT_LABEL.get(verdict, verdict)
     return (
-        f'<span style="background:rgba(0,0,0,.4);border:1px solid {color};'
-        f'color:{color};padding:2px 10px;border-radius:12px;font-size:0.72rem;'
-        f'font-weight:700;margin-top:4px;display:inline-block">{label}</span>'
+        f'<span style="background:#111;border:1px solid {color};'
+        f'color:{color};padding:2px 10px;border-radius:2px;font-size:0.65rem;'
+        f'font-weight:700;margin-top:4px;display:inline-block;'
+        f'font-family:\'JetBrains Mono\',monospace;letter-spacing:1px">{label}</span>'
     )
 
 
@@ -498,7 +578,7 @@ def _run_parallel_agents(
 def _gl_detail_html(guideline_conflicts: List[GuidelineConflict]) -> str:
     """Build the Guidelines Agent detail block."""
     if not guideline_conflicts:
-        return '<span style="color:#374151;font-size:0.72rem">No conflicts detected</span>'
+        return '<span style="color:#2a2a2a;font-size:0.68rem;font-family:\'JetBrains Mono\',monospace">no conflicts detected</span>'
     level_color = {
         "supports": "conflict-supports", "minor": "conflict-minor",
         "moderate": "conflict-moderate", "major": "conflict-major",
@@ -509,7 +589,7 @@ def _gl_detail_html(guideline_conflicts: List[GuidelineConflict]) -> str:
         rows.append(
             f'<div class="guideline-row">'
             f'<span class="guideline-org {cls}">[{c["organization"]}]</span>'
-            f'<span style="color:#6b7280">'
+            f'<span style="color:#555">'
             f'{c["recommendation"][:80]}{"…" if len(c["recommendation"]) > 80 else ""}'
             f'</span>'
             f'</div>'
@@ -534,12 +614,12 @@ def _qa_detail_html(quality_scores: List[StudyQuality]) -> str:
 
 def _an_detail_html(findings: List[Finding], contradictions: List[Contradiction]) -> str:
     dir_icon = {"positive": "↑", "negative": "↓", "neutral": "→"}
-    dir_color = {"positive": "#34d399", "negative": "#ef4444", "neutral": "#6b7280"}
+    dir_color = {"positive": "#00cc88", "negative": "#ff4444", "neutral": "#555"}
     findings_html = "".join(
         f'<div class="finding-row">'
-        f'<span class="finding-dir" style="color:{dir_color.get(f["direction"], "#6b7280")}">'
+        f'<span class="finding-dir" style="color:{dir_color.get(f["direction"], "#555")}">'
         f'{dir_icon.get(f["direction"], "→")}</span>'
-        f'<span style="color:#6b7280">'
+        f'<span style="color:#555">'
         f'{f["claim"][:90]}{"…" if len(f["claim"]) > 90 else ""}</span>'
         f'</div>'
         for f in findings[:5]
@@ -566,7 +646,6 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         gl=("pending", ""), sy=("pending", ""),
         banner=""
     ) -> Tuple[str, str, str]:
-        # Prepend synthesis panel header so it always aligns with the log header
         synth_out = (_SYNTH_HDR + synthesis_md) if synthesis_md else _EMPTY_SYNTH
         return (
             _render(
@@ -580,14 +659,14 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         )
 
     if not question.strip():
-        err = '<p style="color:#ef4444;font-size:0.82rem">⚠ Please enter a question.</p>'
+        err = '<p style="color:#ff4444;font-size:0.75rem;font-family:\'JetBrains Mono\',monospace">⚠ Please enter a question.</p>'
         yield err, synthesis_md, citations_md
         return
 
     try:
         client = _get_client()
     except ValueError as exc:
-        err = f'<p style="color:#ef4444;font-size:0.82rem">❌ {exc}</p>'
+        err = f'<p style="color:#ff4444;font-size:0.75rem;font-family:\'JetBrains Mono\',monospace">❌ {exc}</p>'
         yield err, "", ""
         return
 
@@ -621,8 +700,8 @@ def stream_pipeline(  # pylint: disable=too-many-locals
     if not filtered:
         no_pass_detail = (
             r_detail_full
-            + '<br><span style="color:#f59e0b;font-size:0.72rem">'
-            + '⚠ No papers cleared threshold.</span>'
+            + '<br><span style="color:#ffaa00;font-size:0.68rem;font-family:\'JetBrains Mono\',monospace">'
+            + '⚠ no papers cleared threshold</span>'
         )
         yield emit(q=("done", q_detail), r=("error", no_pass_detail),
                    qa=("pending", ""), an=("pending", ""), gl=("pending", ""))
@@ -670,7 +749,7 @@ def stream_pipeline(  # pylint: disable=too-many-locals
         _tag(str(len(filtered)) + " papers synthesized", "green")
         + (f"  {badge}" if badge else "")
     )
-    banner = '<div class="complete-banner">✦ All agents complete — results ready</div>'
+    banner = '<div class="complete-banner">all agents complete — results ready</div>'
     synthesis_md = _strip_citations_section(synth)
     citations_md = _citations_md(filtered)
 
@@ -690,48 +769,45 @@ def stream_pipeline(  # pylint: disable=too-many-locals
 
 _EMPTY_LOG = (
     '<div class="panel-wrap">'
-    '  <div class="panel-hdr">🤖 &nbsp;Agent Orchestration</div>'
+    '  <div class="panel-hdr">agent orchestration</div>'
     '  <div class="empty-state">'
-    '    <div class="icon">🤖</div>'
-    '    <p>Multi-agent pipeline will stream here</p>'
+    '    <div class="icon">⬡</div>'
+    '    <p>pipeline will stream here</p>'
     '  </div>'
     '</div>'
 )
 
-_SYNTH_HDR = '<div class="panel-hdr">📋 &nbsp;Evidence Synthesis</div>\n\n'
+_SYNTH_HDR = '<div class="synthesis-header">evidence synthesis</div>\n\n'
 
 _EMPTY_SYNTH = (
     _SYNTH_HDR
     + '<div class="empty-state">'
-    + '<div class="icon">📋</div>'
-    + '<p>Evidence synthesis will appear here</p>'
+    + '<div class="icon">≡</div>'
+    + '<p>synthesis will appear here</p>'
     + '</div>'
 )
 
-with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
+with gr.Blocks(css=_CSS, theme=gr.themes.Base(), title="Clinical Literature Scout") as demo:
 
     gr.HTML("""
     <div class="app-header">
-      <h1>Clinical Literature Scout</h1>
-      <p>Multi-agent AI · PubMed retrieval · σ-RAG · Quality scoring · Guideline conflict detection</p>
+      <div class="app-title">Clinical Literature Scout</div>
+      <div class="app-subtitle">multi-agent ai · pubmed retrieval · σ-rag · quality scoring · guideline conflict detection</div>
     </div>
     """)
 
-    # ── Input panel (gr.Column gives natural stacked rows) ────────────────────
+    # ── Input panel ───────────────────────────────────────────────────────────
     with gr.Group(elem_classes="input-card"):
         with gr.Column():
 
-            # Row 1 — Mode label + radio
             with gr.Row():
                 mode_radio = gr.Radio(
                     choices=["scout", "debunker"], value="scout",
                     label="Mode", scale=1, elem_classes="mode-radio",
                 )
 
-            # 8 px spacer
-            gr.HTML('<div style="height:8px"></div>')
+            gr.HTML('<div style="height:6px"></div>')
 
-            # Row 2 — Large text input (full width)
             question_box = gr.Textbox(
                 label="Your Question",
                 placeholder=(
@@ -741,7 +817,6 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
                 lines=3, min_width=600, elem_classes="question-box",
             )
 
-            # Row 3 — σ-RAG threshold slider (left) + Run button (right)
             with gr.Row():
                 sigma_slider = gr.Slider(
                     minimum=0.3, maximum=2.5, value=1.2, step=0.1,
@@ -749,15 +824,16 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
                     scale=4, elem_classes="sigma-slider",
                 )
                 run_btn = gr.Button(
-                    "Run →", scale=1, min_width=120,
+                    "RUN →", scale=1, min_width=120,
                     elem_classes="run-btn", variant="primary",
                 )
 
     # ── Example chips ──────────────────────────────────────────────────────────
     gr.HTML(
-        '<p style="color:#2dd4bf;font-size:.63rem;font-weight:700;'
-        'letter-spacing:1.5px;text-transform:uppercase;margin:12px 0 8px">'
-        'Try an example</p>'
+        '<p style="color:#00ffaa44;font-size:.6rem;font-weight:600;'
+        'letter-spacing:2px;text-transform:uppercase;margin:12px 0 8px;'
+        'font-family:\'JetBrains Mono\',monospace">'
+        '// try an example</p>'
     )
     with gr.Row(elem_classes="examples-row"):
         for ex_q, ex_m in _EXAMPLES:
@@ -768,51 +844,131 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
 
     # ── Late-injected styles (load after Gradio's Svelte CSS — wins cascade) ───
     gr.HTML("""<style>
+/* Terminal textarea */
 .question-box textarea {
-    background: #0a0a14 !important; border: 1px solid #252535 !important;
-    border-radius: 10px !important; color: #e2e8f0 !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
-    resize: vertical !important; padding: 14px 16px !important;
-    line-height: 1.65 !important;
+    background: #0a0a0a !important;
+    border: 1px solid #1e1e1e !important;
+    border-radius: 2px !important;
+    color: #cccccc !important;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+    font-size: 0.85rem !important;
+    resize: vertical !important;
+    padding: 12px 14px !important;
+    line-height: 1.7 !important;
+    caret-color: #00ffaa !important;
 }
 .question-box textarea:focus {
-    border-color: #2dd4bf !important;
-    box-shadow: 0 0 0 2px rgba(45,212,191,0.12) !important; outline: none !important;
+    border-color: #00ffaa44 !important;
+    box-shadow: 0 0 0 1px rgba(0,255,170,0.08) !important;
+    outline: none !important;
 }
+.question-box textarea::placeholder { color: #2a2a2a !important; }
+
+/* Terminal label styling */
+.question-box label span,
+.sigma-slider label span,
+.mode-radio label span {
+    color: #00ffaa66 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.65rem !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+}
+
+/* Mode radio — terminal toggle */
 .mode-radio .wrap label {
-    background: #0e0e1e !important; border: 1px solid #1e1e30 !important;
-    border-radius: 20px !important; color: #6b7280 !important;
-    padding: 5px 18px !important; font-size: 0.8rem !important;
-    transition: all 0.18s !important; cursor: pointer !important;
+    background: #0a0a0a !important;
+    border: 1px solid #1e1e1e !important;
+    border-radius: 2px !important;
+    color: #333 !important;
+    padding: 5px 16px !important;
+    font-size: 0.72rem !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 0.5px !important;
+    transition: all 0.12s !important;
+    cursor: pointer !important;
 }
 .mode-radio .wrap label:has(input:checked) {
-    background: rgba(45,212,191,0.12) !important;
-    border-color: #2dd4bf !important; color: #2dd4bf !important;
+    background: rgba(0,255,170,0.06) !important;
+    border-color: #00ffaa44 !important;
+    color: #00ffaa !important;
 }
+
+/* Run button — neon green terminal style */
 .run-btn button {
-    background: linear-gradient(135deg, #0d9488, #2dd4bf) !important;
-    border: none !important; border-radius: 10px !important;
-    color: #011a18 !important; font-weight: 700 !important; font-size: 0.88rem !important;
-    box-shadow: 0 3px 14px rgba(45,212,191,0.3) !important;
-    transition: transform 0.18s, box-shadow 0.18s !important;
+    background: #00ffaa !important;
+    border: none !important;
+    border-radius: 2px !important;
+    color: #0a0a0a !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 2px !important;
+    box-shadow: 0 0 16px rgba(0,255,170,0.25) !important;
+    transition: box-shadow 0.15s !important;
 }
 .run-btn button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(45,212,191,0.45) !important;
+    background: #00ffcc !important;
+    box-shadow: 0 0 24px rgba(0,255,170,0.45) !important;
 }
+
+/* Example chips — terminal style */
 .example-btn button {
-    background: #071a18 !important; border: 1px solid #0d9488 !important;
-    border-radius: 10px !important; color: #2dd4bf !important;
-    font-size: 0.72rem !important; font-weight: 500 !important;
-    line-height: 1.45 !important; white-space: normal !important;
-    text-align: center !important; min-height: 56px !important;
-    height: auto !important; padding: 10px 12px !important; width: 100% !important;
-    transition: all 0.18s !important;
+    background: #0a0a0a !important;
+    border: 1px solid #1a1a1a !important;
+    border-radius: 2px !important;
+    color: #444 !important;
+    font-size: 0.68rem !important;
+    font-weight: 400 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    line-height: 1.5 !important;
+    white-space: normal !important;
+    text-align: left !important;
+    min-height: 56px !important;
+    height: auto !important;
+    padding: 10px 12px !important;
+    width: 100% !important;
+    transition: all 0.12s !important;
+    letter-spacing: 0.2px !important;
 }
 .example-btn button:hover {
-    background: #0a2825 !important; border-color: #2dd4bf !important;
-    color: #5eead4 !important; transform: translateY(-1px) !important;
+    background: #0f0f0f !important;
+    border-color: #00ffaa33 !important;
+    color: #00ffaa88 !important;
 }
+
+/* Sigma slider track */
+.sigma-slider input[type=range] {
+    accent-color: #00ffaa !important;
+}
+
+/* Citations accordion */
+.citations-accordion > .label-wrap {
+    background: #0f0f0f !important;
+    border-bottom: 1px solid #1e1e1e !important;
+    color: #00ffaa66 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.65rem !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+    border-radius: 2px 2px 0 0 !important;
+    padding: 10px 14px !important;
+}
+
+/* Synthesis markdown text */
+.synth-inner .prose h2::before { content: '## '; color: #00ffaa44; }
+.synth-inner .prose h3::before { content: '### '; color: #444; }
+
+/* Page background */
+.gradio-container, body, #root {
+    background: #0a0a0a !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #00ffaa33; }
 </style>""")
 
     # ── Output panels ──────────────────────────────────────────────────────────
@@ -826,7 +982,7 @@ with gr.Blocks(css=_CSS, title="Clinical Literature Scout") as demo:
                     elem_classes="synth-inner hide-label",
                 )
 
-    # ── Citations accordion (real PubMed links, no duplicates) ─────────────────
+    # ── Citations accordion ─────────────────────────────────────────────────────
     with gr.Accordion("📚 Citations", open=False, elem_classes="citations-accordion"):
         citations_out = gr.Markdown(value="*Citations will appear after synthesis.*")
 
