@@ -19,7 +19,7 @@ from langgraph.graph import END, START, StateGraph
 from agent.agents import query, retrieval, synthesis
 from agent.agents import parallel as parallel_agents
 from agent.agents.synthesis import SynthesisInput
-from agent.state import AgentState, Contradiction, Finding, GuidelineConflict, StudyQuality
+from agent.state import AgentState
 
 
 # ── Shared client ─────────────────────────────────────────────────────────────
