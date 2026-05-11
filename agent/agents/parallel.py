@@ -1,4 +1,5 @@
 """Shared parallel-runner for Quality, Analysis, and Guidelines agents."""
+# pylint: disable=duplicate-code  # intentional consolidation of the parallel pattern
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed

@@ -75,7 +75,7 @@ def orchestrate_retrieval(state: AgentState) -> AgentState:
 
 # ── Node: Parallel Quality + Analysis ────────────────────────────────────────
 
-def orchestrate_parallel(state: AgentState) -> AgentState:
+def orchestrate_parallel(state: AgentState) -> AgentState:  # pylint: disable=too-many-locals
     """Run Quality, Analysis, and Guidelines agents concurrently."""
     papers = state["filtered_papers"]
     question = state["clinical_question"]
